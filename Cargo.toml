@@ -1,0 +1,23 @@
+[package]
+name = "trojan-r"
+version = "0.0.1"
+authors = ["Page Fault <p4gefau1t@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+smol = "1.2.4"
+bytes = "0.5.6"
+pin-project = "1.0.0"
+log = "0.4.11"
+async-trait = "0.1.41"
+futures = "0.3.6"
+async-tls = "0.10.0"
+rustls = { version = "0.18.1" }
+sha2 = "0.9.1"
+hex = "0.4.2"
+serde = { version = "1.0.116", features = ["derive"] } 
+webpki = "0.21.3"
+env_logger = "0.7.1"
+toml = "0.5.7"
+num_cpus = "1.13.0"
+clap = "2.33.3"
