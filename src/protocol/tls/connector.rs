@@ -40,7 +40,12 @@ impl TrojanTlsConnector {
                 .root_store
                 .add_pem_file(&mut BufReader::new(File::open(cert_path)?))
                 .unwrap();
+        } else {
+            tls_config
+                .root_store
+                .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
         }
+
         Ok(Self {
             sni: config.sni.clone(),
             server_addr: config.addr.clone(),

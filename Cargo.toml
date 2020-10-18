@@ -21,3 +21,7 @@ env_logger = "0.7.1"
 toml = "0.5.7"
 num_cpus = "1.13.0"
 clap = "2.33.3"
+webpki-roots = "0.20"
+
+[profile.release]
+lto = true

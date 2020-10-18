@@ -23,9 +23,11 @@ fn main() {
         .get_matches();
     let filename = matches.value_of("config").unwrap().to_string();
     if env::var("SMOL_THREADS").is_err() {
-        let cpu_count = num_cpus::get();
-        log::debug!("cpu count = {}", cpu_count);
-        env::set_var("SMOL_THREADS", cpu_count.to_string());
+        let mut thread_count = num_cpus::get() * 2;
+        if thread_count < 8 {
+            thread_count = 8;
+        }
+        env::set_var("SMOL_THREADS", thread_count.to_string());
     }
     smol::block_on(async {
         if let Err(e) = proxy::launch_from_config(filename).await {

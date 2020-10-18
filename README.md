@@ -82,16 +82,27 @@
 
 ## 编译
 
+由于使用静态链接，编译依赖 x86_64-unknown-linux-musl，请确保已经安装工具链并在 rustup 中添加。
+
+```shell
+make
+```
+
+trojan-r 编译的可执行文件不依赖其他第三方库，如果你不关心 libc 和 pthread 的依赖问题，可以选择编译动态链接的可执行文件。
+
 ```shell
 cargo build --release
 ```
 
-交叉编译可使用 `cross` 完成，例如
+交叉编译基于 `cross` 完成，编译前请确认已经安装 `cross` (`cargo install cross`)
 
 ```shell
-cargo install cross
-cross build --target armv7-linux-androideabi --release
+make armv7-unknown-linux-musleabihf
 ```
+
+编译默认开启链接时优化，以提升性能并减小可执行文件体积，因此编译耗时可能较其他项目更长。
+
+编译完成后可以使用 `strip` 去除调试符号表以减少文件体积。
 
 ## TODOs
 
@@ -108,3 +119,10 @@ cross build --target armv7-linux-androideabi --release
 - [ ] 分离客户端和服务端 features
 
 - [ ] Github Actions
+
+
+## 致谢
+
+- [trojan](https://github.com/trojan-gfw/trojan)
+
+- [shadowsocks-rust](https://github.com/shadowsocks/shadowsocks-rust)

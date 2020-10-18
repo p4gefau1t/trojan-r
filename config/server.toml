@@ -1,11 +1,12 @@
 mode = "server"
+log_level = "debug" # optional
 
 [trojan]
 password = "password"
 fallback_addr = "127.0.0.1:80"
 
 [tls]
-addr = "127.0.0.1:443"
+addr = "0.0.0.0:443"
 sni = "example.com"
 cert = "cert.pem"
 key = "key.pem"
