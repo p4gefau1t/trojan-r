@@ -10,3 +10,7 @@ addr = "0.0.0.0:443"
 sni = "example.com"
 cert = "cert.pem"
 key = "key.pem"
+
+#optional
+#[websocket]
+#path = "/trojanpath"
