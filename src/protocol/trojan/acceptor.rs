@@ -6,10 +6,8 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use smol::io::AsyncWriteExt;
 use smol::net::TcpStream;
-use std::collections::HashSet;
 use std::io;
 use std::str::FromStr;
-use std::sync::Arc;
 
 #[derive(Deserialize)]
 pub struct TrojanAcceptorConfig {
@@ -18,7 +16,7 @@ pub struct TrojanAcceptorConfig {
 }
 
 pub struct TrojanAcceptor<T: ProxyAcceptor> {
-    valid_hash: Arc<HashSet<String>>,
+    valid_hash: String,
     fallback_addr: Address,
     inner: T,
 }
@@ -60,11 +58,8 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
 
 impl<T: ProxyAcceptor> TrojanAcceptor<T> {
     pub fn new(config: &TrojanAcceptorConfig, inner: T) -> io::Result<Self> {
-        let mut valid_hash = HashSet::new();
-        let hash = password_to_hash(&config.password);
-        valid_hash.insert(hash);
+        let valid_hash = password_to_hash(&config.password);
         let fallback_addr = Address::from_str(&config.fallback_addr)?;
-        let valid_hash = Arc::new(valid_hash);
         Ok(Self {
             fallback_addr,
             valid_hash,

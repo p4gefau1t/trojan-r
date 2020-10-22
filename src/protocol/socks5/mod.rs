@@ -1,5 +1,4 @@
 use crate::error::Error;
-use serde::Deserialize;
 use std::io;
 
 pub mod acceptor;

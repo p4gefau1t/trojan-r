@@ -1,7 +1,6 @@
 use super::new_error;
 use crate::protocol::Address;
 use smol::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use std::collections::HashSet;
 use std::io;
 
 mod consts {
@@ -81,7 +80,7 @@ impl TrojanRequestHeader {
 
     pub async fn read_from<R>(
         stream: &mut R,
-        valid_hash: &HashSet<String>,
+        valid_hash: &String,
         first_packet: &mut Vec<u8>,
     ) -> io::Result<Self>
     where
@@ -101,7 +100,7 @@ impl TrojanRequestHeader {
             new_error(format!("failed to convert hash to utf8 {}", e.to_string()))
         })?;
 
-        if !valid_hash.contains(&hash) {
+        if !(valid_hash == &hash) {
             first_packet.extend_from_slice(&hash_buf[..]);
             return Err(new_error(format!("invalid password hash: {}", hash)));
         }

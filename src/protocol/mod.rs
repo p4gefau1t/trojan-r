@@ -23,12 +23,13 @@ pub mod dokodemo;
 pub mod socks5;
 pub mod tls;
 pub mod trojan;
+pub mod websocket;
 
 fn new_error<T: ToString>(message: T) -> io::Error {
     return Error::new(format!("protocol: {}", message.to_string())).into();
 }
 
-pub trait ProxyTcpStream: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
+pub trait ProxyTcpStream: AsyncRead + AsyncWrite + Send + Unpin {}
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Address {
     /// Socket address (IP Address)
@@ -317,7 +318,7 @@ pub trait UdpWrite: Send + Sync + Unpin {
     async fn write_to(&mut self, buf: &[u8], addr: &Address) -> io::Result<()>;
 }
 
-pub trait ProxyUdpStream: UdpRead + UdpWrite + Send + Sync + Unpin {
+pub trait ProxyUdpStream: UdpRead + UdpWrite + Send + Unpin {
     type R: UdpRead;
     type W: UdpWrite;
     fn split(self) -> (Self::R, Self::W);
@@ -340,13 +341,6 @@ impl<T: ProxyTcpStream, U: ProxyUdpStream> AcceptResult<T, U> {
     pub fn unwrap_tcp_with_addr(self) -> (T, Address) {
         match self {
             Self::Tcp(t) => t,
-            _ => unreachable!(),
-        }
-    }
-
-    pub fn unwrap_udp(self) -> U {
-        match self {
-            Self::Udp(u) => u,
             _ => unreachable!(),
         }
     }
