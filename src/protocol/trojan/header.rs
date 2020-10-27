@@ -125,13 +125,13 @@ impl TrojanRequestHeader {
     where
         W: AsyncWrite + Unpin,
     {
-        w.write_all(self.hash.as_bytes()).await?;
-        let crlf = [0x0du8, 0x0a];
-        w.write_all(&crlf).await?;
+        w.write(self.hash.as_bytes()).await?;
+        let crlf = b"\r\n";
+        w.write(crlf).await?;
         let cmd = [self.command.as_u8()];
-        w.write_all(&cmd).await?;
+        w.write(&cmd).await?;
         self.address.write_to_stream(w).await?;
-        w.write_all(&crlf).await?;
+        w.write(crlf).await?;
         Ok(())
     }
 }
@@ -178,13 +178,10 @@ impl TrojanUdpHeader {
         W: AsyncWrite + Unpin,
     {
         self.address.write_to_stream(w).await?;
-        let len = [
-            ((self.payload_len & 0xff00) >> 8) as u8,
-            (self.payload_len & 0xff) as u8,
-        ];
-        w.write_all(&len).await?;
-        let crlf = [0x0du8, 0x0a];
-        w.write_all(&crlf).await?;
+        self.payload_len.to_be_bytes();
+        w.write(&self.payload_len.to_be_bytes()).await?;
+        let crlf = b"\r\n";
+        w.write(crlf).await?;
         Ok(())
     }
 }

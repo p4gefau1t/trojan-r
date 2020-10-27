@@ -112,7 +112,8 @@ impl TcpResponseHeader {
     {
         let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
-        w.write_all(&buf).await
+        w.write(&buf).await?;
+        Ok(())
     }
 
     /// Writes to buffer

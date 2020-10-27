@@ -23,7 +23,7 @@ use std::io;
 use std::io::Read;
 use std::sync::Arc;
 
-async fn copy_udp<R: UdpRead, W: UdpWrite>(mut r: R, mut w: W) -> io::Result<()> {
+async fn copy_udp<R: UdpRead, W: UdpWrite>(r: &mut R, w: &mut W) -> io::Result<()> {
     let mut buf = [0u8; 1024 * 8];
     loop {
         let (size, addr) = r.read_from(&mut buf).await?;
@@ -36,8 +36,8 @@ async fn copy_udp<R: UdpRead, W: UdpWrite>(mut r: R, mut w: W) -> io::Result<()>
 }
 
 async fn copy_tcp<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
-    mut r: R,
-    mut w: W,
+    r: &mut R,
+    w: &mut W,
 ) -> io::Result<()> {
     let mut buf = [0u8; 1024 * 32];
     loop {
@@ -51,23 +51,29 @@ async fn copy_tcp<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
 }
 
 pub async fn relay_udp<T: ProxyUdpStream, U: ProxyUdpStream>(a: T, b: U) {
-    let (a_rx, a_tx) = a.split();
-    let (b_rx, b_tx) = b.split();
-    let t1 = copy_udp(a_rx, b_tx);
-    let t2 = copy_udp(b_rx, a_tx);
+    let (mut a_rx, mut a_tx) = a.split();
+    let (mut b_rx, mut b_tx) = b.split();
+    let t1 = copy_udp(&mut a_rx, &mut b_tx);
+    let t2 = copy_udp(&mut b_rx, &mut a_tx);
     if let Err(e) = t1.race(t2).await {
         log::debug!("udp session ends: {}", e)
     }
+    let _ = T::reunite(a_rx, a_tx).close();
+    let _ = U::reunite(b_rx, b_tx).close();
 }
 
 pub async fn relay_tcp<T: ProxyTcpStream, U: ProxyTcpStream>(a: T, b: U) {
-    let (a_rx, a_tx) = a.split();
-    let (b_rx, b_tx) = b.split();
-    let t1 = copy_tcp(a_rx, b_tx);
-    let t2 = copy_tcp(b_rx, a_tx);
+    let (mut a_rx, mut a_tx) = a.split();
+    let (mut b_rx, mut b_tx) = b.split();
+    let t1 = copy_tcp(&mut a_rx, &mut b_tx);
+    let t2 = copy_tcp(&mut b_rx, &mut a_tx);
     if let Err(e) = t1.race(t2).await {
         log::debug!("tcp session ends: {}", e)
     }
+    let mut a = a_rx.reunite(a_tx).unwrap();
+    let mut b = b_rx.reunite(b_tx).unwrap();
+    let _ = a.close().await;
+    let _ = b.close().await;
 }
 
 #[derive(Deserialize)]

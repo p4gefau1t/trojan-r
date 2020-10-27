@@ -69,11 +69,20 @@ impl UdpWrite for DirectUdpStream {
     }
 }
 
+#[async_trait]
 impl ProxyUdpStream for DirectUdpStream {
     type R = Self;
     type W = Self;
 
     fn split(self) -> (Self::R, Self::W) {
-        (self.clone(), self.clone())
+        (self.clone(), self)
+    }
+
+    fn reunite(r: Self::R, _: Self::W) -> Self {
+        r
+    }
+
+    async fn close(self) -> io::Result<()> {
+        Ok(())
     }
 }

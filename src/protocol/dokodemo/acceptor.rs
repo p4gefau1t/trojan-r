@@ -34,12 +34,21 @@ impl UdpWrite for DokodemoUdpStream {
     }
 }
 
+#[async_trait]
 impl ProxyUdpStream for DokodemoUdpStream {
     type R = Self;
     type W = Self;
 
     fn split(self) -> (Self::R, Self::W) {
         (self.clone(), self)
+    }
+
+    fn reunite(r: Self::R, _: Self::W) -> Self {
+        r
+    }
+
+    async fn close(self) -> Result<()> {
+        Ok(())
     }
 }
 

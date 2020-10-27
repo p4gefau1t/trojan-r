@@ -22,7 +22,7 @@ toml = "0.5"
 num_cpus = "1.13"
 clap = "2.33"
 webpki-roots = "0.20"
-async-tungstenite = "0.9"
+async-tungstenite = "0.10"
 async_io_stream = "0.1"
 
 [profile.release]

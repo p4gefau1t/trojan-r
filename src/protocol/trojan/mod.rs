@@ -54,7 +54,7 @@ impl<T: AsyncWrite + Unpin + Send + Sync> UdpWrite for TrojanUdpWriter<T> {
     async fn write_to(&mut self, buf: &[u8], addr: &Address) -> io::Result<()> {
         let header = TrojanUdpHeader::new(addr, buf.len());
         header.write_to(&mut self.inner).await?;
-        self.inner.write_all(buf).await?;
+        self.inner.write(buf).await?;
         Ok(())
     }
 }
@@ -94,5 +94,18 @@ impl<T: ProxyTcpStream> ProxyUdpStream for TrojanUdpStream<T> {
 
     fn split(self) -> (Self::R, Self::W) {
         (self.reader, self.writer)
+    }
+
+    fn reunite(r: Self::R, w: Self::W) -> Self {
+        Self {
+            reader: r,
+            writer: w,
+        }
+    }
+
+    async fn close(self) -> io::Result<()> {
+        let mut inner = self.reader.inner.reunite(self.writer.inner).unwrap();
+        inner.close().await?;
+        Ok(())
     }
 }

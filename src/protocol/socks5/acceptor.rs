@@ -89,12 +89,21 @@ impl UdpWrite for Socks5UdpStream {
     }
 }
 
+#[async_trait]
 impl ProxyUdpStream for Socks5UdpStream {
     type R = Self;
     type W = Self;
 
     fn split(self) -> (Self::R, Self::W) {
         (self.clone(), self.clone())
+    }
+
+    fn reunite(r: Self::R, _: Self::W) -> Self {
+        r
+    }
+
+    async fn close(self) -> io::Result<()> {
+        Ok(())
     }
 }
 

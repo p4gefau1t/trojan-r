@@ -228,7 +228,8 @@ impl Address {
     {
         let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
-        writer.write_all(&buf).await
+        writer.write(&buf).await?;
+        Ok(())
     }
 
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
@@ -313,10 +314,13 @@ pub trait UdpWrite: Send + Sync + Unpin {
     async fn write_to(&mut self, buf: &[u8], addr: &Address) -> io::Result<()>;
 }
 
+#[async_trait]
 pub trait ProxyUdpStream: UdpRead + UdpWrite + Send + Unpin {
     type R: UdpRead;
     type W: UdpWrite;
     fn split(self) -> (Self::R, Self::W);
+    fn reunite(r: Self::R, w: Self::W) -> Self;
+    async fn close(self) -> io::Result<()>;
 }
 
 #[async_trait]
@@ -387,6 +391,12 @@ impl ProxyUdpStream for DummyUdpStream {
     type R = DummyUdpRead;
     type W = DummyUdpWrite;
     fn split(self) -> (Self::R, Self::W) {
+        unimplemented!()
+    }
+    fn reunite(_: Self::R, _: Self::W) -> Self {
+        unimplemented!()
+    }
+    async fn close(self) -> io::Result<()> {
         unimplemented!()
     }
 }

@@ -46,7 +46,7 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
                 smol::spawn(async move {
                     let inbound = stream;
                     let mut outbound = TcpStream::connect(fallback_addr.to_string()).await.unwrap();
-                    let _ = outbound.write_all(&first_packet).await;
+                    let _ = outbound.write(&first_packet).await;
                     relay_tcp(inbound, outbound).await;
                 })
                 .detach();
