@@ -64,9 +64,13 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Sink<Vec<u8>> for AWsWrapper<T> {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.inner)
-            .poll_close(cx)
-            .map_err(|e| new_error(e))
+        let message = Message::Close(None);
+        let inner = Pin::new(&mut self.inner);
+        ready!(inner.poll_ready(cx)).map_err(|e| new_error(e))?;
+        let inner = Pin::new(&mut self.inner);
+        inner.start_send(message).map_err(|e| new_error(e))?;
+        let inner = Pin::new(&mut self.inner);
+        inner.poll_close(cx).map_err(|e| new_error(e))
     }
 }
 

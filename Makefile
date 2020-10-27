@@ -1,8 +1,8 @@
-default: x86_64-unknown-linux-musl
+default:
+	cargo build --release
 
 x86_64-unknown-linux-musl:
 	cargo build --target $@ --release
-	strip target/$@/release/trojan-r
 
 armv7-unknown-linux-musleabihf:
 	cross build --target $@ --release

@@ -8,7 +8,7 @@ mod protocol;
 mod proxy;
 
 fn main() {
-    let matches = App::new("trojan-lite")
+    let matches = App::new("trojan-r")
         .version("v0.0.1")
         .arg(
             Arg::with_name("config")
@@ -31,7 +31,7 @@ fn main() {
     }
     smol::block_on(async {
         if let Err(e) = proxy::launch_from_config_filename(filename).await {
-            log::error!("failed to launch proxy: {}", e);
+            println!("failed to launch proxy: {}", e);
         }
     });
 }
