@@ -1,3 +1,5 @@
+use super::{new_error, WebSocketRWStream};
+use crate::protocol::{AcceptResult, DummyUdpStream, ProxyAcceptor};
 use async_trait::async_trait;
 use async_tungstenite::{
     self, tungstenite::handshake::server::Callback, tungstenite::handshake::server::ErrorResponse,
@@ -7,9 +9,6 @@ use async_tungstenite::{
 use log::error;
 use serde::Deserialize;
 use std::io;
-
-use super::{new_error, WebSocketRWStream};
-use crate::protocol::{AcceptResult, DummyUdpStream, ProxyAcceptor};
 
 #[derive(Deserialize)]
 pub struct WebSocketAcceptorConfig {

@@ -1,12 +1,9 @@
-use std::io;
-
+use super::{new_error, WebSocketRWStream};
 use crate::protocol::{DummyUdpStream, ProxyConnector};
 use async_trait::async_trait;
 use async_tungstenite::tungstenite::http::{StatusCode, Uri};
 use serde::Deserialize;
-//use ws_stream_tungstenite::WsStream;
-
-use super::{new_error, WebSocketRWStream};
+use std::io;
 
 #[derive(Deserialize)]
 pub struct WebSocketConnectorConfig {

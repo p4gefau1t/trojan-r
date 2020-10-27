@@ -1,6 +1,5 @@
 use async_trait::async_trait;
-use bytes::{buf::BufExt, BufMut};
-use bytes::{Buf, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use smol::prelude::*;
 use std::{
     fmt,
@@ -104,11 +103,10 @@ impl Address {
         let addr_type = addr_type_buf[0];
         match addr_type {
             Self::ADDR_TYPE_IPV4 => {
-                let mut buf = BytesMut::with_capacity(6);
-                buf.resize(6, 0);
-                let _ = stream.read_exact(&mut buf).await?;
+                let mut buf = [0u8; 6];
+                stream.read_exact(&mut buf).await?;
+                let mut cursor = Cursor::new(buf);
 
-                let mut cursor = buf.to_bytes();
                 let v4addr = Ipv4Addr::new(
                     cursor.get_u8(),
                     cursor.get_u8(),
@@ -122,7 +120,7 @@ impl Address {
             }
             Self::ADDR_TYPE_IPV6 => {
                 let mut buf = [0u8; 18];
-                let _ = stream.read_exact(&mut buf).await?;
+                stream.read_exact(&mut buf).await?;
 
                 let mut cursor = Cursor::new(&buf);
                 let v6addr = Ipv6Addr::new(
@@ -143,23 +141,20 @@ impl Address {
             }
             Self::ADDR_TYPE_DOMAIN_NAME => {
                 let mut length_buf = [0u8; 1];
-                let _ = stream.read_exact(&mut length_buf).await?;
+                let mut addr_buf = [0u8; 255 + 2];
+                stream.read_exact(&mut length_buf).await?;
                 let length = length_buf[0] as usize;
 
                 // Len(Domain) + Len(Port)
-                let buf_length = length + 2;
-                let mut buf = BytesMut::with_capacity(buf_length);
-                buf.resize(buf_length, 0);
-                let _ = stream.read_exact(&mut buf).await?;
+                stream.read_exact(&mut addr_buf[..length + 2]).await?;
 
-                let mut cursor = buf.to_bytes();
-                let mut raw_addr = Vec::with_capacity(length);
-                raw_addr.put(&mut BufExt::take(&mut cursor, length));
-                let addr = match String::from_utf8(raw_addr) {
+                let domain_buf = &addr_buf[..length];
+                let addr = match String::from_utf8(domain_buf.to_vec()) {
                     Ok(addr) => addr,
                     Err(..) => return Err(Error::new("invalid address encoding")),
                 };
-                let port = cursor.get_u16();
+                let mut port_buf = &addr_buf[length..length + 2];
+                let port = port_buf.get_u16();
 
                 Ok(Address::DomainNameAddress(addr, port))
             }

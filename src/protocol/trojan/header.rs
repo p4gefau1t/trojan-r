@@ -134,11 +134,6 @@ impl TrojanRequestHeader {
         w.write_all(&crlf).await?;
         Ok(())
     }
-
-    #[inline]
-    pub fn serialized_len(&self) -> usize {
-        56 + 2 + 1 + self.address.serialized_len() + 2
-    }
 }
 
 /// ```plain
@@ -191,10 +186,5 @@ impl TrojanUdpHeader {
         let crlf = [0x0du8, 0x0a];
         w.write_all(&crlf).await?;
         Ok(())
-    }
-
-    #[inline]
-    pub fn serialized_len(&self) -> usize {
-        self.address.serialized_len() + 2 + 2
     }
 }

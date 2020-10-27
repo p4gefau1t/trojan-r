@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 smol = "1.2"
-bytes = "0.5"
+bytes = "0.6"
 pin-project = "1.0"
 log = "0.4"
 async-trait = "0.1"

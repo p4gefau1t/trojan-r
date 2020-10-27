@@ -122,10 +122,13 @@ impl ProxyAcceptor for Socks5Acceptor {
 
         // 1. handshake
         let req = HandshakeRequest::read_from(&mut stream).await?;
-        if !req.methods.contains(&header::SOCKS5_AUTH_METHOD_NONE) {
+        if !req
+            .methods
+            .contains(&header::consts::SOCKS5_AUTH_METHOD_NONE)
+        {
             return Err(new_error("invalid handshake method"));
         }
-        let resp = HandshakeResponse::new(header::SOCKS5_AUTH_METHOD_NONE);
+        let resp = HandshakeResponse::new(header::consts::SOCKS5_AUTH_METHOD_NONE);
         resp.write_to(&mut stream).await?;
 
         // 2. parse
@@ -134,10 +137,8 @@ impl ProxyAcceptor for Socks5Acceptor {
         // 3. respond
         return match req.command {
             Command::TcpConnect => {
-                let resp = TcpResponseHeader::new(
-                    header::Reply::Succeeded,
-                    Address::SocketAddress(self.tcp_listener.local_addr().unwrap()),
-                );
+                let resp =
+                    TcpResponseHeader::new(Address::SocketAddress(self.tcp_listener.local_addr()?));
                 resp.write_to(&mut stream).await?;
                 Ok(AcceptResult::Tcp((stream, req.address)))
             }
@@ -146,10 +147,7 @@ impl ProxyAcceptor for Socks5Acceptor {
                 let ip = self.tcp_listener.local_addr().unwrap().ip();
                 let socket_addr = SocketAddr::new(ip, 0);
                 let udp_socket = UdpSocket::bind(socket_addr).await?;
-                let resp = TcpResponseHeader::new(
-                    header::Reply::Succeeded,
-                    Address::SocketAddress(udp_socket.local_addr().unwrap()),
-                );
+                let resp = TcpResponseHeader::new(Address::SocketAddress(udp_socket.local_addr()?));
                 log::debug!(
                     "udp socket listening on {}",
                     udp_socket.local_addr().unwrap()
@@ -170,8 +168,6 @@ impl ProxyAcceptor for Socks5Acceptor {
                     shutdown: shutdown_rx,
                 }))
             }
-
-            Command::TcpBind => Err(new_error("invalid command")),
         };
     }
 }
