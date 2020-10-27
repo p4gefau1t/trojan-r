@@ -82,14 +82,6 @@
 
 ## 编译
 
-由于使用静态链接，编译依赖 x86_64-unknown-linux-musl，请确保已经安装工具链并在 rustup 中添加。
-
-```shell
-make
-```
-
-trojan-r 编译的可执行文件不依赖其他第三方库，如果你不关心 libc 和 pthread 的依赖问题，可以选择编译动态链接的可执行文件。
-
 ```shell
 cargo build --release
 ```
