@@ -1,0 +1,20 @@
+on: [push]
+
+name: mipsel build
+
+jobs:
+  linux_arm7:
+    name: Linux mipsel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: mipsel-unknown-linux-musl
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          use-cross: true
+          command: build --release
+          args: --target mipsel-unknown-linux-musl
