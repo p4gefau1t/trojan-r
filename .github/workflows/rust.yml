@@ -19,4 +19,4 @@ jobs:
           env: 
             RUSTFLAGS='-C target-cpu=cortex-a53'
           command: build
-          args: --release --target aarch64-linux-android
+          args: --release -v --target aarch64-linux-android
