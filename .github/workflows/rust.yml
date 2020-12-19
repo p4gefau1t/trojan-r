@@ -20,3 +20,7 @@ jobs:
             RUSTFLAGS='-C target-cpu=cortex-a53'
           command: build
           args: --release -v --target aarch64-linux-android
+      - uses: actions/upload-artifact@v2
+        with:
+           name: trojan-r
+           path: ./target/release/trojan-r
