@@ -1,4 +1,4 @@
 [build.env]
 passthrough = [
-  "RUSTFLAGS='-C target-cpu=cortex-a53'",
+  "RUSTFLAGS",
 ]
