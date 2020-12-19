@@ -26,4 +26,6 @@ async-tungstenite = "0.10"
 async_io_stream = "0.1"
 
 [profile.release]
-lto = true
+lto = "fat"
+codegen-units = 1
+panic = "abort"
