@@ -23,4 +23,4 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
            name: trojan-r
-           path: ./target/release/trojan-r
+           path: target/aarch64-linux-android/release/trojan-r
