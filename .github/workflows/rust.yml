@@ -1,16 +1,22 @@
 on: [push]
 
-name: mipsel build
+name: ARM build
 
 jobs:
-  linux_arm7:
-    name: Linux mipsel
+  linux_arm:
+    name: Linux ARM
     runs-on: ubuntu-latest
     steps:
-      - name: install rust toolchain
-        uses: hecrj/setup-rust-action@v1
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
         with:
-          rust-version: nightly
-      - name: build
-        run: |
-          cargo build --release --target mipsel-unknown-linux-gnu
+          toolchain: stable
+          target: aarch64-linux-android
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          use-cross: true
+          env: 
+            RUSTFLAGS='-C target-cpu=cortex-a53'
+          command: build
+          args: --release --target aarch64-linux-android
