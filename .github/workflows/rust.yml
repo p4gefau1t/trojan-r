@@ -7,14 +7,10 @@ jobs:
     name: Linux mipsel
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - name: install rust toolchain
+        uses: hecrj/setup-rust-action@v1
         with:
-          toolchain: nightly
-          target: mipsel-unknown-linux-gnu
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          use-cross: true
-          command: build
-          args: --release --target mipsel-unknown-linux-gnu
+          rust-version: nightly
+      - name: build
+        run: |
+          cargo build --release --target mipsel-unknown-linux-gnu
