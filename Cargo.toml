@@ -24,6 +24,7 @@ clap = "2.33"
 webpki-roots = "0.20"
 async-tungstenite = "0.10"
 async_io_stream = "0.1"
+tls-parser = "0.7.0"
 
 [profile.release]
 lto = "fat"
