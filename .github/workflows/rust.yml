@@ -1,26 +1,41 @@
 on: [push]
 
-name: ARM build
+#name: ARM build
+name: msvc rust
 
 jobs:
-  linux_arm:
-    name: Linux ARM
-    runs-on: ubuntu-latest
+  msvc_build:
+    name: msvc_build
+    runs-on: windows
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v1
+      - uses: ilammy/msvc-dev-cmd@v1
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          target: aarch64-linux-android
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          use-cross: true
-          env: 
-            RUSTFLAGS='-C target-cpu=cortex-a53'
-          command: build
-          args: --release -v --target aarch64-linux-android
-      - uses: actions/upload-artifact@v2
-        with:
-           name: trojan-r
-           path: target/aarch64-linux-android/release/trojan-r
+      - name: Build
+        run: |
+          rustup show
+
+#jobs:
+#  linux_arm:
+#    name: Linux ARM
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v2
+#      - uses: actions-rs/toolchain@v1
+#        with:
+#          toolchain: stable
+#          target: aarch64-linux-android
+#          override: true
+#      - uses: actions-rs/cargo@v1
+#        with:
+#          use-cross: true
+#          env: 
+#            RUSTFLAGS='-C target-cpu=cortex-a53'
+#          command: build
+#          args: --release -v --target aarch64-linux-android
+#      - uses: actions/upload-artifact@v2
+#        with:
+#           name: trojan-r
+#           path: target/aarch64-linux-android/release/trojan-r
