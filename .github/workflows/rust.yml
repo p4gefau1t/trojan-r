@@ -6,7 +6,7 @@ name: msvc rust
 jobs:
   msvc_build:
     name: msvc_build
-    runs-on: windows
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v1
       - uses: ilammy/msvc-dev-cmd@v1
