@@ -15,7 +15,7 @@ jobs:
           toolchain: stable
       - name: Build
         run: |
-          rustup show
+          RUSTFLAGS='-C target-cpu=amdfam10' cargo build --release
           
 
 #jobs:
