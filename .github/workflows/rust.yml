@@ -18,7 +18,7 @@ jobs:
           RUSTFLAGS: -C target-cpu=amdfam10
         run: 
           cargo build --release -v
-      - name: Upload
+
       - uses: actions/upload-artifact@v2
         with:
           name: trojan-r
