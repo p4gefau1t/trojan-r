@@ -64,7 +64,7 @@ impl ProxyConnector for TrojanTlsConnector {
         let stream = TlsConnector::from(self.tls_config.clone())
             .connect(self.sni.clone(), stream)
             .await?;
-        log::info!("tls: connected to {}", self.server_addr);
+        //log::info!("tls: connected to {}", self.server_addr);
         Ok(stream)
     }
 
