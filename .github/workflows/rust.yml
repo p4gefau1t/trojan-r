@@ -25,25 +25,24 @@ jobs:
           path: target/release/trojan-r.exe
           
 
-#jobs:
-#  linux_arm:
-#    name: Linux ARM
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v2
-#      - uses: actions-rs/toolchain@v1
-#        with:
-#          toolchain: stable
-#          target: aarch64-linux-android
-#          override: true
-#      - uses: actions-rs/cargo@v1
-#        with:
-#          use-cross: true
-#          env: 
-#            RUSTFLAGS='-C target-cpu=cortex-a53'
-#          command: build
-#          args: --release -v --target aarch64-linux-android
-#      - uses: actions/upload-artifact@v2
-#        with:
-#           name: trojan-r
-#           path: target/aarch64-linux-android/release/trojan-r
+  linux_arm:
+    name: Linux ARM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-linux-android
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          use-cross: true
+          env: 
+            RUSTFLAGS='-C target-cpu=cortex-a53'
+          command: build
+          args: --release --target aarch64-linux-android
+      - uses: actions/upload-artifact@v2
+        with:
+           name: trojan-r
+           path: target/aarch64-linux-android/release/trojan-r
