@@ -15,7 +15,8 @@ jobs:
           toolchain: stable
       - name: Build
         run: |
-          RUSTFLAGS='-C target-cpu=amdfam10' cargo build --release
+          env RUSTFLAGS='-C target-cpu=amdfam10' 
+          cargo build --release -v
           
 
 #jobs:
