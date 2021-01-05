@@ -3,7 +3,10 @@ log_level = "debug" # optional
 
 [dokodemo]
 target_addr = "8.8.8.8:53"
-listsen_addr = "127.0.0.1:53"
+listen_addr = "127.0.0.1:53"
+
+[trojan]
+password = "password"
 
 [tls]
 addr = "example.com:443"
