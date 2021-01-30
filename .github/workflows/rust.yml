@@ -14,14 +14,14 @@ jobs:
         with:
           toolchain: stable
       - name: Build
-        #env:
-        #  RUSTFLAGS: -C target-cpu=amdfam10
+        env:
+          RUSTFLAGS: -C target-cpu=amdfam10
         run: 
           cargo build --release
 
       - uses: actions/upload-artifact@v2
         with:
-          name: trojan-r
+          name: trojan-r.exe
           path: target/release/trojan-r.exe
           
 
