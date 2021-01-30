@@ -142,7 +142,7 @@ impl ProxyAcceptor for Socks5Acceptor {
 
         // 2. parse
         let req = TcpRequestHeader::read_from(&mut stream).await?;
-        log::info!("socks5 connection to {}", req.address);
+        log::info!("accepted {}", req.address);
 
         // 3. respond
         return match req.command {
