@@ -126,7 +126,7 @@ impl ProxyAcceptor for Socks5Acceptor {
     type US = Socks5UdpStream;
 
     async fn accept(&self) -> io::Result<AcceptResult<Self::TS, Self::US>> {
-        let (mut stream, addr) = self.tcp_listener.accept().await?;
+        let (mut stream, _addr) = self.tcp_listener.accept().await?;
         //log::info!("socks5 connection from addr {}", addr);
 
         // 1. handshake

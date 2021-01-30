@@ -31,9 +31,12 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
         match TrojanRequestHeader::read_from(&mut stream, &self.valid_hash, &mut first_packet).await
         {
             Ok(header) => {
-                log::info!("trojan connection from {}, user = {}", addr, header.hash);
+                log::debug!("trojan connection from {}, user = {}", addr, header.hash);
                 match header.command {
-                    Command::TcpConnect => Ok(AcceptResult::Tcp((stream, header.address))),
+                    Command::TcpConnect => {
+                        log::info!("connected to {}", header.address);
+                        Ok(AcceptResult::Tcp((stream, header.address)))
+                    }
                     Command::UdpAssociate => {
                         log::debug!("udp associate");
                         Ok(AcceptResult::Udp(TrojanUdpStream::new(stream)))

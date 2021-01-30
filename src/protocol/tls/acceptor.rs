@@ -31,7 +31,7 @@ impl ProxyAcceptor for TrojanTlsAcceptor {
 
     async fn accept(&self) -> io::Result<AcceptResult<Self::TS, Self::US>> {
         let (stream, addr) = self.tcp_listener.accept().await?;
-        log::info!("tcp connection from {}", addr);
+        //log::info!("tcp connection from {}", addr);
         let stream = self.tls_acceptor.accept(stream).await?;
         Ok(AcceptResult::Tcp((stream, Address::SocketAddress(addr))))
     }
