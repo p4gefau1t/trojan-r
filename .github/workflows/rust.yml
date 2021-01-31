@@ -15,7 +15,7 @@ jobs:
           toolchain: stable
       - name: Build
         env:
-          RUSTFLAGS: -C target-cpu=amdfam10 -Cprofile-generate=C:\Users\chez\Desktop\pgo -Cpanic=abort
+          RUSTFLAGS: -C target-cpu=amdfam10 -Cprofile-generate=pgodata -Cpanic=abort
         run: 
           cargo build --release
 
