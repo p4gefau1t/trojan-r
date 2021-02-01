@@ -46,6 +46,32 @@ jobs:
         with:
            name: android-trojan-r
            path: target/aarch64-linux-android/release/trojan-r
+
+  mipsel:
+    name: mipsel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: mipsel-unknown-linux-gnu
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          use-cross: true
+          command: build
+          args: --release --target mipsel-unknown-linux-gnu
+
+      - uses: P3TERX/ssh2actions@v1.0.0
+      env:
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        
+      - uses: actions/upload-artifact@v2
+        with:
+           name: mips-trojan-r
+           path: target/mipsel-unknown-linux-gnu/release/trojan-r
   
   linux:
     name: linux
