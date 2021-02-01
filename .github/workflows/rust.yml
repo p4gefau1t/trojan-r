@@ -64,10 +64,11 @@ jobs:
           args: --release --target mipsel-unknown-linux-gnu
 
       - uses: P3TERX/ssh2actions@v1.0.0
-      env:
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        
+        with:
+          env:
+            TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+            TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
       - uses: actions/upload-artifact@v2
         with:
            name: mips-trojan-r
