@@ -60,8 +60,8 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           use-cross: true
-          command: build
-          args: --release --target mipsel-unknown-linux-gnu
+          command: list
+          #args: --release --target mipsel-unknown-linux-gnu
 
       - uses: P3TERX/ssh2actions@v1.0.0
 
