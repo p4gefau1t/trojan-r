@@ -89,3 +89,4 @@ jobs:
         with:
            name: linux-trojan-r
            path: target/release/trojan-r
+
