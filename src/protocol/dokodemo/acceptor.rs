@@ -56,12 +56,12 @@ impl ProxyAcceptor for DokodemoAcceptor {
 
     async fn accept(&self) -> Result<AcceptResult<Self::TS, Self::US>> {
         let (stream, addr) = self.tcp_listener.accept().await?;
-        log::info!("tcp connection from {}", addr.to_string());
+        log::debug!("tcp connection from {}", addr.to_string());
 
         let mut buf: [u8; 1024] = [0; 1024];
         stream.peek(&mut buf).await?;
         let name = parse_tls_connection(&buf)?;
-        log::info!("connected to {}", name);
+        log::debug!("connected to {}", name);
         let addr = Address::from_str(&name).map_err(|err| new_error(err.message))?;
         Ok(AcceptResult::Tcp((stream, addr)))
     }
