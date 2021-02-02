@@ -58,10 +58,11 @@ jobs:
         with:
           repository: 'briansmith/ring'
           path: './ring'
+
+      - run: cd ring
       - uses: dawidd6/action-checkout-pr@v1
         with:
           pr: 1181
-          repo: 'briansmith/ring'
 
       - uses: P3TERX/ssh2actions@v1.0.0
       
