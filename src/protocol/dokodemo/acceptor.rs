@@ -8,8 +8,8 @@ use std::io;
 use std::io::Result;
 use std::str::{from_utf8, FromStr};
 use tls_parser::{
-    parse_tls_extension_sni, parse_tls_plaintext, TlsExtension, TlsMessage::Handshake,
-    TlsMessageHandshake::ClientHello,
+    parse_tls_extensions,
+    parse_tls_plaintext, TlsExtension, TlsMessage::Handshake, TlsMessageHandshake::ClientHello,
 };
 
 #[derive(Deserialize)]
@@ -31,20 +31,25 @@ fn parse_tls_connection(buf: &[u8]) -> io::Result<String> {
     let (_, res) = parse_tls_plaintext(&buf).map_err(|_| new_error("unexpected protocol"))?;
     match &res.msg[0] {
         Handshake(ClientHello(contents)) => {
-            log::debug!("{:?}",contents);
             let ext = contents
                 .ext
                 .ok_or(())
                 .map_err(|_| new_error("unable to find tls extensions"))?;
-            match parse_tls_extension_sni(ext)
-                .map_err(|_| new_error("parse tls extensions error"))?
-            {
-                (_, TlsExtension::SNI(v)) => {
-                    let name = from_utf8(v[0].1).unwrap().to_string() + ":443";
-                    Ok(name)
-                }
-                _ => Err(new_error("can't find domain name")),
-            }
+
+            let (_, exts) = parse_tls_extensions(ext)
+                .map_err(|_| new_error("unable to parse tls extensions"))?;
+
+            let v = exts
+                .iter()
+                .find_map(|i| match i {
+                    TlsExtension::SNI(v) => Some(v),
+                    _ => None,
+                })
+                .ok_or(())
+                .map_err(|_| new_error("unable to find tls extension SNI"))?;
+
+            let name = from_utf8(v[0].1).unwrap().to_string() + ":443";
+            Ok(name)
         }
         _ => Err(new_error("unexpected handshake type")),
     }
@@ -57,10 +62,10 @@ impl ProxyAcceptor for DokodemoAcceptor {
 
     async fn accept(&self) -> Result<AcceptResult<Self::TS, Self::US>> {
         let (stream, addr) = self.tcp_listener.accept().await?;
-        log::debug!("tcp connection from {}", addr.to_string());
 
-        let mut buf: [u8; 1024] = [0; 1024];
+        let mut buf: [u8; 2048] = [0; 2048];
         stream.peek(&mut buf).await?;
+
         let name = parse_tls_connection(&buf)?;
         log::debug!("connected to {}", name);
         let addr = Address::from_str(&name).map_err(|err| new_error(err.message))?;
