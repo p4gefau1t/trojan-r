@@ -61,7 +61,7 @@ impl ProxyAcceptor for DokodemoAcceptor {
     type US = DummyUdpStream;
 
     async fn accept(&self) -> Result<AcceptResult<Self::TS, Self::US>> {
-        let (stream, addr) = self.tcp_listener.accept().await?;
+        let (stream, _) = self.tcp_listener.accept().await?;
 
         let mut buf: [u8; 2048] = [0; 2048];
         stream.peek(&mut buf).await?;
