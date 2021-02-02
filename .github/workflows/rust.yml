@@ -64,7 +64,9 @@ jobs:
         working-directory: ./ring
         run: |
           git fetch origin pull/1181/head:mips
-          git merge mips --no-commit --no-ff --allow-unrelated-histories --author="zrah <zrah@protonmail.com>" 
+          git config --global user.email "example.com"
+          git config --global user.name "zrah"
+          git merge mips --no-commit --no-ff --allow-unrelated-histories 
       
       - name: Patch Cargo.toml
         run: |
