@@ -64,14 +64,14 @@ jobs:
         working-directory: ./ring
         run: |
           git fetch origin pull/1181/head:mips
-          git checkout mips
+          git merge mips --no-commit --no-ff
       
       - name: Patch Cargo.toml
         run: |
           echo '[patch.crates-io]' >> Cargo.toml
-          echo 'ring = { path = "./ring" , version = "0.16.19" }' >> Cargo.toml
+          echo 'ring = { path = "./ring" }' >> Cargo.toml
 
-      - uses: P3TERX/ssh2actions@v1.0.0
+      #- uses: P3TERX/ssh2actions@v1.0.0
       
       - uses: actions-rs/toolchain@v1
         with:
