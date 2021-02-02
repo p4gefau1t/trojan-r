@@ -31,6 +31,7 @@ fn parse_tls_connection(buf: &[u8]) -> io::Result<String> {
     let (_, res) = parse_tls_plaintext(&buf).map_err(|_| new_error("unexpected protocol"))?;
     match &res.msg[0] {
         Handshake(ClientHello(contents)) => {
+            log::info!("{}",contents.version);
             let ext = contents
                 .ext
                 .ok_or(())
