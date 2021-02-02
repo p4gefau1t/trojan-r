@@ -70,10 +70,7 @@ jobs:
         run: |
           echo '[patch.crates-io]' >> Cargo.toml
           echo 'ring = { path = "./ring" , version = "0.16.19" }' >> Cargo.toml
-          
-#         echo '[replace.crates-io]' >> Cargo.toml 
-#         echo ' "ring:0.16.20" = { path = './ring' }' >> Cargo.toml
-          
+
       - uses: P3TERX/ssh2actions@v1.0.0
       
       - uses: actions-rs/toolchain@v1
