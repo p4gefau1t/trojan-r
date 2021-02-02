@@ -54,14 +54,13 @@ jobs:
       - name: Checkout trojan-r
         uses: actions/checkout@v2
 
-      - name: Checkout ring pr 1181 with mips support
+      - name: Checkout ring PR 1181 with mips support
         working-directory: ./ring
-        uses: actions/checkout@v2
+        uses: dawidd6/action-checkout-pr@v1
         with:
-          repository: 'briansmith/ring'
-        run: |
-          git fetch origin pull/1181/head:mips
-          git checkout mips
+          pr: 1181
+          repo: 'briansmith/ring'
+
 
       - uses: P3TERX/ssh2actions@v1.0.0
       
