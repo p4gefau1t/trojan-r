@@ -63,6 +63,13 @@ jobs:
           command: list
           #args: --release --target mipsel-unknown-linux-gnu
 
+      - uses: actions/checkout@v2
+        with:
+          repository: 'https://github.com/briansmith/ring.git'
+          run: 
+            git fetch origin pull/1181/head:mips
+            git checkout mips
+
       - uses: P3TERX/ssh2actions@v1.0.0
 
       - uses: actions/upload-artifact@v2
