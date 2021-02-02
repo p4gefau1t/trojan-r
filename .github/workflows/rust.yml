@@ -71,7 +71,7 @@ jobs:
           echo '[patch.crates-io]' >> Cargo.toml
           echo 'ring = { path = "./ring" }' >> Cargo.toml
           
-      - uses: P3TERX/ssh2actions@v1.0.0
+      #- uses: P3TERX/ssh2actions@v1.0.0
       
       - uses: actions-rs/toolchain@v1
         with:
