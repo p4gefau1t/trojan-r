@@ -51,14 +51,14 @@ jobs:
     name: mipsel
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/checkout@v2
-          with:
-            repository: 'briansmith/ring'
-            path 'ring'
+      - name: Checkout trojan-r
+        uses: actions/checkout@v2
 
       - name: Checkout ring pr 1181 with mips support
         working-directory: ./ring
+        uses: actions/checkout@v2
+        with:
+          repository: 'briansmith/ring'
         run: |
           git fetch origin pull/1181/head:mips
           git checkout mips
