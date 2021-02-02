@@ -52,6 +52,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      //checkout ring pr 1181 with mips support
+      - uses: actions/checkout@v2
+        with:
+          repository: 'briansmith/ring'
+          path: './ring'
+      - uses: dawidd6/action-checkout-pr@v1
+        with:
+          pr: 1181
+          repository: 'briansmith/ring'
+          
+      - uses: P3TERX/ssh2actions@v1.0.0
+      
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -63,15 +75,7 @@ jobs:
           command: list
           #args: --release --target mipsel-unknown-linux-gnu
 
-      - uses: actions/checkout@v2
-        with:
-          repository: 'briansmith/ring'
-          path: './ring'
-      - uses: dawidd6/action-checkout-pr@v1
-        with:
-          pr: 1181
-
-      - uses: P3TERX/ssh2actions@v1.0.0
+      
 
       - uses: actions/upload-artifact@v2
         with:
