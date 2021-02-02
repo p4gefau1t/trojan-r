@@ -52,7 +52,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      //checkout ring pr 1181 with mips support
+
+      #checkout ring pr 1181 with mips support
       - uses: actions/checkout@v2
         with:
           repository: 'briansmith/ring'
@@ -61,7 +62,7 @@ jobs:
         with:
           pr: 1181
           repository: 'briansmith/ring'
-          
+
       - uses: P3TERX/ssh2actions@v1.0.0
       
       - uses: actions-rs/toolchain@v1
