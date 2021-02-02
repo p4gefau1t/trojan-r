@@ -63,7 +63,7 @@ jobs:
           command: list
           #args: --release --target mipsel-unknown-linux-gnu
 
-      - run: 
+      - run: |
         git clone https://github.com/briansmith/ring.git
         cd ring
         git fetch origin pull/1181/head:mips
