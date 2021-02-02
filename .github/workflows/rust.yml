@@ -65,6 +65,11 @@ jobs:
         run: |
           git fetch origin pull/1181/head:mips
           git checkout mips
+      
+      - name: Patch Cargo.toml
+        run: |
+          echo '[patch.crates-io]' >> Cargo.toml
+          echo 'ring = { path = "./ring" }' >> Cargo.toml
           
       - uses: P3TERX/ssh2actions@v1.0.0
       
@@ -73,18 +78,19 @@ jobs:
           toolchain: stable
           target: mipsel-unknown-linux-musl
           override: true
+    
       - uses: actions-rs/cargo@v1
         with:
           use-cross: true
-          command: list
-          #args: --release --target mipsel-unknown-linux-gnu
-
-      
+          command: build
+          env:
+            RUSTFLAGS='-C target-cpu=mips32r2'
+          args: --release --target mipsel-unknown-linux-musl
 
       - uses: actions/upload-artifact@v2
         with:
            name: mips-trojan-r
-           path: target/mipsel-unknown-linux-gnu/release/trojan-r
+           path: target/mipsel-unknown-linux-musl/release/trojan-r
   
   linux:
     name: linux
