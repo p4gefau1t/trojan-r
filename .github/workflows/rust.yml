@@ -54,23 +54,26 @@ jobs:
       - name: Checkout trojan-r
         uses: actions/checkout@v2
         
-      - name: Checkout ring
-        uses: actions/checkout@v2
-        with:
-          repository: 'briansmith/ring'
-          path: './ring'
+#      - name: Checkout ring
+#        uses: actions/checkout@v2
+#        with:
+#          repository: 'briansmith/ring'
+#          path: './ring'
 
       - name: Checkout ring PR 1181 with mips support
-        working-directory: ./ring
         run: |
+          git clone https://github.com/briansmith/ring.git
+          cd ring
           git fetch origin pull/1181/head:mips
-          git checkout mips
+          git config --global user.email "example.com"
+          git config --global user.name "zrah"
+          git merge mips --no-commit --no-ff --allow-unrelated-histories 
       
       - name: Patch Cargo.toml
         run: |
           echo '[patch.crates-io]' >> Cargo.toml
           echo 'ring = { path = "./ring" }' >> Cargo.toml
-          
+
       #- uses: P3TERX/ssh2actions@v1.0.0
       
       - uses: actions-rs/toolchain@v1
