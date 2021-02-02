@@ -53,20 +53,20 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      #checkout ring pr 1181 with mips support
-      - uses: actions/checkout@v2
-        with:
-          repository: 'briansmith/ring'
-          path: './ring'
-
-      - run: cd ring && git fetch origin pull/1181/head:mips && git checkout mips
+      - name: checkout ring pr 1181 with mips support
+        uses: actions/checkout@v2
+          with:
+            repository: 'briansmith/ring'
+            path: './ring'
+        run: cd ring && git fetch origin pull/1181/head:mips && git checkout mips
+        
 
       - uses: P3TERX/ssh2actions@v1.0.0
       
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          target: mipsel-unknown-linux-gnu
+          target: mipsel-unknown-linux-musl
           override: true
       - uses: actions-rs/cargo@v1
         with:
