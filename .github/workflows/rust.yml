@@ -63,7 +63,7 @@ jobs:
           command: list
           #args: --release --target mipsel-unknown-linux-gnu
 
-      -name: checkout https://github.com/briansmith/ring/pull/1181
+      -name: checkout
         run: |
           git clone https://github.com/briansmith/ring.git
           cd ring
