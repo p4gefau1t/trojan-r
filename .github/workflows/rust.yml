@@ -69,7 +69,7 @@ jobs:
       - name: Patch Cargo.toml
         run: |
           echo '[patch.crates-io]' >> Cargo.toml
-          echo 'ring = { path = "./ring" , version = '0.16.19'}' >> Cargo.toml
+          echo 'ring = { path = "./ring" , version = "0.16.19" }' >> Cargo.toml
           
 #         echo '[replace.crates-io]' >> Cargo.toml 
 #         echo ' "ring:0.16.20" = { path = './ring' }' >> Cargo.toml
