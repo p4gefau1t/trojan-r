@@ -12,6 +12,7 @@ use std::{
     io::{self, BufReader},
 };
 
+
 #[derive(Deserialize)]
 pub struct TrojanTlsConnectorConfig {
     addr: String,

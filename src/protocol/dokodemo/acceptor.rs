@@ -1,7 +1,6 @@
 use crate::error::Error;
 use crate::protocol::{AcceptResult, Address, DummyUdpStream, ProxyAcceptor};
 use async_trait::async_trait;
-use log;
 use serde::Deserialize;
 use smol::net::{TcpListener, TcpStream};
 use std::io;
@@ -23,7 +22,7 @@ pub struct DokodemoAcceptor {
 
 #[inline]
 fn new_error<T: ToString>(message: T) -> io::Error {
-    return Error::new(format!("socks: {}", message.to_string())).into();
+    Error::new(format!("socks: {}", message.to_string())).into()
 }
 
 #[inline]
