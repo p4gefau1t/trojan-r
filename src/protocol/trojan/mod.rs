@@ -16,7 +16,7 @@ pub mod connector;
 mod header;
 
 fn new_error<T: ToString>(message: T) -> io::Error {
-     Error::new(format!("trojan: {}", message.to_string())).into()
+    Error::new(format!("trojan: {}", message.to_string())).into()
 }
 
 fn password_to_hash<T: ToString>(s: T) -> String {

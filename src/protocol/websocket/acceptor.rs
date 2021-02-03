@@ -56,7 +56,7 @@ impl<T: ProxyAcceptor> ProxyAcceptor for WebSocketAcceptor<T> {
             None,
         )
         .await
-        .map_err( new_error)?;
+        .map_err(new_error)?;
         let stream = WebSocketRWStream::new(stream);
         Ok(AcceptResult::Tcp((stream, addr)))
     }

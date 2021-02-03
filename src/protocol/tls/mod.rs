@@ -10,7 +10,7 @@ pub mod acceptor;
 pub mod connector;
 
 fn new_error<T: ToString>(message: T) -> io::Error {
-     Error::new(format!("tls: {}", message.to_string())).into()
+    Error::new(format!("tls: {}", message.to_string())).into()
 }
 
 fn load_cert(path: &Path) -> io::Result<Vec<Certificate>> {
@@ -29,7 +29,7 @@ fn load_key(path: &Path) -> io::Result<Vec<PrivateKey>> {
     if !rsa_key.is_empty() {
         return Ok(rsa_key);
     }
-     Err(new_error("no valid key found"))
+    Err(new_error("no valid key found"))
 }
 
 fn get_cipher_name(cipher: &SupportedCipherSuite) -> &'static str {

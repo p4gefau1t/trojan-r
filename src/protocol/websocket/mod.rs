@@ -32,11 +32,9 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Stream for AWsWrapper<T> {
         let message = message.unwrap().map_err(new_error)?;
         // binary only
         match message {
-            Message::Binary(binary) =>  Poll::Ready(Some(Ok(binary))),
-            Message::Close(_) => {
-                 Poll::Ready(None)
-            }
-            _ =>  Poll::Ready(Some(Err(new_error("invalid message type")))),
+            Message::Binary(binary) => Poll::Ready(Some(Ok(binary))),
+            Message::Close(_) => Poll::Ready(None),
+            _ => Poll::Ready(Some(Err(new_error("invalid message type")))),
         }
     }
 }
@@ -45,9 +43,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Sink<Vec<u8>> for AWsWrapper<T> {
     type Error = io::Error;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.inner)
-            .poll_ready(cx)
-            .map_err(new_error)
+        Pin::new(&mut self.inner).poll_ready(cx).map_err(new_error)
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: Vec<u8>) -> Result<(), Self::Error> {
@@ -58,9 +54,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Sink<Vec<u8>> for AWsWrapper<T> {
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.inner)
-            .poll_flush(cx)
-            .map_err(new_error)
+        Pin::new(&mut self.inner).poll_flush(cx).map_err(new_error)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -69,9 +63,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Sink<Vec<u8>> for AWsWrapper<T> {
         Pin::new(&mut self.inner)
             .start_send(message)
             .map_err(new_error)?;
-        Pin::new(&mut self.inner)
-            .poll_close(cx)
-            .map_err(new_error)
+        Pin::new(&mut self.inner).poll_close(cx).map_err(new_error)
     }
 }
 
@@ -125,5 +117,5 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> WebSocketRWStream<T> {
 }
 
 fn new_error<T: ToString>(message: T) -> io::Error {
-     Error::new(format!("websocket: {}", message.to_string())).into()
+    Error::new(format!("websocket: {}", message.to_string())).into()
 }

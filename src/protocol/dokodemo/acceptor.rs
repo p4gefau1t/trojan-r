@@ -7,8 +7,8 @@ use std::io;
 use std::io::Result;
 use std::str::{from_utf8, FromStr};
 use tls_parser::{
-    parse_tls_extensions,
-    parse_tls_plaintext, TlsExtension, TlsMessage::Handshake, TlsMessageHandshake::ClientHello,
+    parse_tls_extensions, parse_tls_plaintext, TlsExtension, TlsMessage::Handshake,
+    TlsMessageHandshake::ClientHello,
 };
 
 #[derive(Deserialize)]

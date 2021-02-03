@@ -23,12 +23,12 @@ use serde::Deserialize;
 use smol::future::FutureExt;
 use smol::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use std::fs::File;
+use std::hash::Hash;
 use std::io;
 use std::io::BufRead;
 use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
-use std::hash::Hash;
 
 async fn copy_udp<R: UdpRead, W: UdpWrite>(r: &mut R, w: &mut W) -> io::Result<()> {
     let mut buf = [0u8; 1024 * 8];
@@ -131,8 +131,7 @@ pub fn hash24<T: Hash + ?Sized>(v: &T) -> usize {
 
 impl Route {
     pub fn new() -> Self {
-        
-        let size_24bit:usize = 16777216 - 1;
+        let size_24bit: usize = 16777216 - 1;
         let mut bv = BitVec::from_elem(size_24bit, false);
 
         if let Ok(lines) = read_lines("rule.txt") {
