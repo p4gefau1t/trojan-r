@@ -69,10 +69,10 @@ pub struct TrojanRequestHeader {
 }
 
 impl TrojanRequestHeader {
-    pub fn new(hash: &String, command: Command, address: &Address) -> Self {
+    pub fn new(hash: &str, command: Command, address: &Address) -> Self {
         // TODO use reference
         Self {
-            hash: hash.clone(),
+            hash: hash.to_string(),
             command,
             address: address.clone(),
         }
@@ -80,7 +80,7 @@ impl TrojanRequestHeader {
 
     pub async fn read_from<R>(
         stream: &mut R,
-        valid_hash: &String,
+        valid_hash: &str,
         first_packet: &mut Vec<u8>,
     ) -> io::Result<Self>
     where
@@ -100,7 +100,7 @@ impl TrojanRequestHeader {
             new_error(format!("failed to convert hash to utf8 {}", e.to_string()))
         })?;
 
-        if !(valid_hash == &hash) {
+        if valid_hash != hash {
             first_packet.extend_from_slice(&hash_buf[..]);
             return Err(new_error(format!("invalid password hash: {}", hash)));
         }

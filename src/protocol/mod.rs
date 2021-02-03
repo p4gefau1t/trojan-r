@@ -25,7 +25,7 @@ pub mod trojan;
 pub mod websocket;
 
 fn new_error<T: ToString>(message: T) -> io::Error {
-    return Error::new(format!("protocol: {}", message.to_string())).into();
+     Error::new(format!("protocol: {}", message.to_string())).into()
 }
 
 pub trait ProxyTcpStream: AsyncRead + AsyncWrite + Send + Unpin {}

@@ -10,7 +10,7 @@ pub mod acceptor;
 pub mod connector;
 
 fn new_error<T: ToString>(message: T) -> io::Error {
-    return Error::new(format!("tls: {}", message.to_string())).into();
+     Error::new(format!("tls: {}", message.to_string())).into()
 }
 
 fn load_cert(path: &Path) -> io::Result<Vec<Certificate>> {
@@ -21,15 +21,15 @@ fn load_cert(path: &Path) -> io::Result<Vec<Certificate>> {
 fn load_key(path: &Path) -> io::Result<Vec<PrivateKey>> {
     let pkcs8_key = pemfile::pkcs8_private_keys(&mut BufReader::new(File::open(path)?))
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid tls pkcs8 key"))?;
-    if pkcs8_key.len() != 0 {
+    if !pkcs8_key.is_empty() {
         return Ok(pkcs8_key);
     }
     let rsa_key = pemfile::rsa_private_keys(&mut BufReader::new(File::open(path)?))
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid tls rsa key"))?;
-    if rsa_key.len() != 0 {
+    if !rsa_key.is_empty() {
         return Ok(rsa_key);
     }
-    return Err(new_error("no valid key found"));
+     Err(new_error("no valid key found"))
 }
 
 fn get_cipher_name(cipher: &SupportedCipherSuite) -> &'static str {

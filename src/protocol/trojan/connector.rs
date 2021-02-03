@@ -17,7 +17,7 @@ pub struct TrojanConnector<T: ProxyConnector> {
 
 impl<T: ProxyConnector> TrojanConnector<T> {
     pub fn new(config: &TrojanConnectorConfig, inner: T) -> io::Result<Self> {
-        if config.password.len() < 1 {
+        if config.password.is_empty() {
             return Err(new_error("no valid password found"));
         }
         let hash = password_to_hash(&config.password);

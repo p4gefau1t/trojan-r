@@ -55,7 +55,7 @@ impl UdpRead for Socks5UdpStream {
 
         let (recv_len, addr) = result?;
 
-        let src_address = self.src_addr.read().await.clone();
+        let src_address = *self.src_addr.read().await;
         if src_address.is_none() {
             // first packet
             self.src_addr.write().await.replace(addr);
@@ -95,7 +95,7 @@ impl ProxyUdpStream for Socks5UdpStream {
     type W = Self;
 
     fn split(self) -> (Self::R, Self::W) {
-        (self.clone(), self.clone())
+        (self.clone(), self)
     }
 
     fn reunite(r: Self::R, _: Self::W) -> Self {

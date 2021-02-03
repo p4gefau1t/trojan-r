@@ -246,7 +246,7 @@ async fn run_rule_proxy<I: ProxyAcceptor, O: ProxyConnector + 'static>(
                 let direct_connector = direct_connector.clone();
 
                 smol::spawn(async move {
-                    if result == false {
+                    if !result {
                         log::info!("accepted {}", &addr);
                         tcp_proxy(inbound, connector, &addr).await;
                     } else {

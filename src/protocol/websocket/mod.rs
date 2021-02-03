@@ -29,14 +29,14 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Stream for AWsWrapper<T> {
         if message.is_none() {
             return Poll::Ready(None);
         }
-        let message = message.unwrap().map_err(|e| new_error(e))?;
+        let message = message.unwrap().map_err(new_error)?;
         // binary only
         match message {
-            Message::Binary(binary) => return Poll::Ready(Some(Ok(binary))),
+            Message::Binary(binary) =>  Poll::Ready(Some(Ok(binary))),
             Message::Close(_) => {
-                return Poll::Ready(None);
+                 Poll::Ready(None)
             }
-            _ => return Poll::Ready(Some(Err(new_error("invalid message type")))),
+            _ =>  Poll::Ready(Some(Err(new_error("invalid message type")))),
         }
     }
 }
@@ -47,31 +47,31 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Sink<Vec<u8>> for AWsWrapper<T> {
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Pin::new(&mut self.inner)
             .poll_ready(cx)
-            .map_err(|e| new_error(e))
+            .map_err(new_error)
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: Vec<u8>) -> Result<(), Self::Error> {
         let message = Message::Binary(item);
         Pin::new(&mut self.inner)
             .start_send(message)
-            .map_err(|e| new_error(e))
+            .map_err(new_error)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Pin::new(&mut self.inner)
             .poll_flush(cx)
-            .map_err(|e| new_error(e))
+            .map_err(new_error)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        ready!(Pin::new(&mut self.inner).poll_ready(cx)).map_err(|e| new_error(e))?;
+        ready!(Pin::new(&mut self.inner).poll_ready(cx)).map_err(new_error)?;
         let message = Message::Close(None);
         Pin::new(&mut self.inner)
             .start_send(message)
-            .map_err(|e| new_error(e))?;
+            .map_err(new_error)?;
         Pin::new(&mut self.inner)
             .poll_close(cx)
-            .map_err(|e| new_error(e))
+            .map_err(new_error)
     }
 }
 
@@ -125,5 +125,5 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> WebSocketRWStream<T> {
 }
 
 fn new_error<T: ToString>(message: T) -> io::Error {
-    return Error::new(format!("websocket: {}", message.to_string())).into();
+     Error::new(format!("websocket: {}", message.to_string())).into()
 }
