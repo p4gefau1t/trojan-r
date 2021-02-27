@@ -1,15 +1,12 @@
 use crate::error::Error;
-use crate::protocol::trojan::header::TrojanUdpHeader;
-use crate::protocol::{Address, ProxyTcpStream, ProxyUdpStream, UdpRead, UdpWrite};
 use async_trait::async_trait;
-use futures::{
-    io::{ReadHalf, WriteHalf},
-    AsyncReadExt,
-};
 use sha2::{Digest, Sha224};
-use smol::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use std::fmt::Write;
-use std::io;
+use std::{fmt::Write, io};
+use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
+
+use self::header::TrojanUdpHeader;
+
+use super::{Address, ProxyTcpStream, ProxyUdpStream, UdpRead, UdpWrite};
 
 pub mod acceptor;
 pub mod connector;
@@ -66,7 +63,7 @@ pub struct TrojanUdpStream<T: ProxyTcpStream> {
 
 impl<T: ProxyTcpStream> TrojanUdpStream<T> {
     pub fn new(inner: T) -> Self {
-        let (reader, writer) = inner.split();
+        let (reader, writer) = split(inner);
         let reader = TrojanUdpReader { inner: reader };
         let writer = TrojanUdpWriter { inner: writer };
         Self { reader, writer }
@@ -104,8 +101,8 @@ impl<T: ProxyTcpStream> ProxyUdpStream for TrojanUdpStream<T> {
     }
 
     async fn close(self) -> io::Result<()> {
-        let mut inner = self.reader.inner.reunite(self.writer.inner).unwrap();
-        inner.close().await?;
+        let mut inner = self.reader.inner.unsplit(self.writer.inner);
+        inner.shutdown().await?;
         Ok(())
     }
 }

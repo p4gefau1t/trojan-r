@@ -6,7 +6,7 @@ use std::{
 
 use super::super::Address;
 use bytes::{BufMut, BytesMut};
-use smol::prelude::*;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::protocol::socks5::new_error;
 

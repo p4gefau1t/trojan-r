@@ -1,16 +1,17 @@
-use crate::protocol::tls::get_cipher_suite;
 use crate::protocol::{Address, DummyUdpStream, ProxyConnector, ProxyTcpStream};
-use async_tls::{client::TlsStream, TlsConnector};
 use async_trait::async_trait;
-use rustls::ClientConfig;
 use serde::Deserialize;
-use smol::net::TcpStream;
-use std::path::Path;
-use std::sync::Arc;
 use std::{
     fs::File,
     io::{self, BufReader},
+    path::Path,
+    sync::Arc,
 };
+use tokio::net::TcpStream;
+use tokio_rustls::{client::TlsStream, rustls::ClientConfig, TlsConnector};
+use webpki::DNSNameRef;
+
+use super::get_cipher_suite;
 
 #[derive(Deserialize)]
 pub struct TrojanTlsConnectorConfig {
@@ -61,8 +62,12 @@ impl ProxyConnector for TrojanTlsConnector {
 
     async fn connect_tcp(&self, _: &Address) -> io::Result<Self::TS> {
         let stream = TcpStream::connect(&self.server_addr).await?;
+        // TODO: try_from
         let stream = TlsConnector::from(self.tls_config.clone())
-            .connect(self.sni.clone(), stream)
+            .connect(
+                DNSNameRef::try_from_ascii_str(&self.sni.clone()).unwrap(),
+                stream,
+            )
             .await?;
         log::info!("tls: connected to {}", self.server_addr);
         Ok(stream)

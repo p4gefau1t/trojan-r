@@ -1,9 +1,11 @@
-use crate::protocol::direct::DirectTcpStream;
-use crate::protocol::{Address, ProxyConnector};
-use async_trait::async_trait;
-use smol::net::{TcpStream, UdpSocket};
+use std::sync::Arc;
 
-use super::DirectUdpStream;
+use async_trait::async_trait;
+use tokio::net::{TcpStream, UdpSocket};
+
+use crate::protocol::{Address, ProxyConnector};
+
+use super::{DirectTcpStream, DirectUdpStream};
 
 pub struct DirectConnector {}
 
@@ -20,7 +22,7 @@ impl ProxyConnector for DirectConnector {
     }
 
     async fn connect_udp(&self) -> std::io::Result<Self::US> {
-        let socket = UdpSocket::bind("0.0.0.0:0").await?;
+        let socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
         Ok(DirectUdpStream { inner: socket })
     }
 }

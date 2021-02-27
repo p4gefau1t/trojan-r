@@ -1,14 +1,16 @@
-use super::{new_error, WebSocketRWStream};
+use super::{new_error, BinaryWsStream};
 use crate::protocol::{AcceptResult, DummyUdpStream, ProxyAcceptor};
 use async_trait::async_trait;
-use async_tungstenite::{
-    self, tungstenite::handshake::server::Callback, tungstenite::handshake::server::ErrorResponse,
-    tungstenite::handshake::server::Request, tungstenite::handshake::server::Response,
-    tungstenite::http::StatusCode,
-};
 use log::error;
 use serde::Deserialize;
 use std::io;
+use tokio_tungstenite::{
+    accept_hdr_async_with_config,
+    tungstenite::{
+        handshake::server::{Callback, ErrorResponse, Request, Response},
+        http::StatusCode,
+    },
+};
 
 #[derive(Deserialize)]
 pub struct WebSocketAcceptorConfig {
@@ -43,12 +45,12 @@ pub struct WebSocketAcceptor<T: ProxyAcceptor> {
 
 #[async_trait]
 impl<T: ProxyAcceptor> ProxyAcceptor for WebSocketAcceptor<T> {
-    type TS = WebSocketRWStream<T::TS>;
+    type TS = BinaryWsStream<T::TS>;
     type US = DummyUdpStream;
 
     async fn accept(&self) -> io::Result<AcceptResult<Self::TS, Self::US>> {
         let (stream, addr) = self.inner.accept().await?.unwrap_tcp_with_addr();
-        let stream = async_tungstenite::accept_hdr_async_with_config(
+        let stream = accept_hdr_async_with_config(
             stream,
             WebSocketCallback {
                 path: self.path.clone(),
@@ -57,7 +59,7 @@ impl<T: ProxyAcceptor> ProxyAcceptor for WebSocketAcceptor<T> {
         )
         .await
         .map_err(|e| new_error(e))?;
-        let stream = WebSocketRWStream::new(stream);
+        let stream = BinaryWsStream::new(stream);
         Ok(AcceptResult::Tcp((stream, addr)))
     }
 }

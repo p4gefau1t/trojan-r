@@ -1,27 +1,35 @@
-use crate::protocol::websocket::acceptor::{WebSocketAcceptor, WebSocketAcceptorConfig};
-use crate::protocol::websocket::connector::{WebSocketConnector, WebSocketConnectorConfig};
+use std::{
+    fs::File,
+    io::{self, Read},
+    sync::Arc,
+};
+
+use log::LevelFilter;
+use serde::Deserialize;
+use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
 use crate::{
     error::Error,
     protocol::{
-        direct::connector::DirectConnector, dokodemo::acceptor::DokodemoAcceptor,
-        dokodemo::acceptor::DokodemoAcceptorConfig, socks5::acceptor::Socks5Acceptor,
-        socks5::acceptor::Socks5AcceptorConfig, tls::acceptor::TrojanTlsAcceptor,
-        tls::acceptor::TrojanTlsAcceptorConfig, tls::connector::TrojanTlsConnector,
-        tls::connector::TrojanTlsConnectorConfig, trojan::acceptor::TrojanAcceptor,
-        trojan::acceptor::TrojanAcceptorConfig, trojan::connector::TrojanConnector,
-        trojan::connector::TrojanConnectorConfig, AcceptResult, ProxyAcceptor, ProxyConnector,
-        ProxyTcpStream, ProxyUdpStream, UdpRead, UdpWrite,
+        direct::connector::DirectConnector,
+        dokodemo::acceptor::{DokodemoAcceptor, DokodemoAcceptorConfig},
+        socks5::acceptor::{Socks5Acceptor, Socks5AcceptorConfig},
+        tls::{
+            acceptor::{TrojanTlsAcceptor, TrojanTlsAcceptorConfig},
+            connector::{TrojanTlsConnector, TrojanTlsConnectorConfig},
+        },
+        trojan::{
+            acceptor::{TrojanAcceptor, TrojanAcceptorConfig},
+            connector::{TrojanConnector, TrojanConnectorConfig},
+        },
+        websocket::{
+            acceptor::{WebSocketAcceptor, WebSocketAcceptorConfig},
+            connector::{WebSocketConnector, WebSocketConnectorConfig},
+        },
+        AcceptResult, ProxyAcceptor, ProxyConnector, ProxyTcpStream, ProxyUdpStream, UdpRead,
+        UdpWrite,
     },
 };
-use futures::AsyncReadExt;
-use log::LevelFilter;
-use serde::Deserialize;
-use smol::future::FutureExt;
-use smol::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use std::fs::File;
-use std::io;
-use std::io::Read;
-use std::sync::Arc;
 
 async fn copy_udp<R: UdpRead, W: UdpWrite>(r: &mut R, w: &mut W) -> io::Result<()> {
     let mut buf = [0u8; 1024 * 8];
@@ -55,7 +63,11 @@ pub async fn relay_udp<T: ProxyUdpStream, U: ProxyUdpStream>(a: T, b: U) {
     let (mut b_rx, mut b_tx) = b.split();
     let t1 = copy_udp(&mut a_rx, &mut b_tx);
     let t2 = copy_udp(&mut b_rx, &mut a_tx);
-    if let Err(e) = t1.race(t2).await {
+    let e = tokio::select! {
+        e = t1 => {e}
+        e = t2 => {e}
+    };
+    if let Err(e) = e {
         log::debug!("udp session ends: {}", e)
     }
     let _ = T::reunite(a_rx, a_tx).close();
@@ -63,17 +75,21 @@ pub async fn relay_udp<T: ProxyUdpStream, U: ProxyUdpStream>(a: T, b: U) {
 }
 
 pub async fn relay_tcp<T: ProxyTcpStream, U: ProxyTcpStream>(a: T, b: U) {
-    let (mut a_rx, mut a_tx) = a.split();
-    let (mut b_rx, mut b_tx) = b.split();
+    let (mut a_rx, mut a_tx) = split(a);
+    let (mut b_rx, mut b_tx) = split(b);
     let t1 = copy_tcp(&mut a_rx, &mut b_tx);
     let t2 = copy_tcp(&mut b_rx, &mut a_tx);
-    if let Err(e) = t1.race(t2).await {
+    let e = tokio::select! {
+        e = t1 => {e}
+        e = t2 => {e}
+    };
+    if let Err(e) = e {
         log::debug!("tcp session ends: {}", e)
     }
-    let mut a = a_rx.reunite(a_tx).unwrap();
-    let mut b = b_rx.reunite(b_tx).unwrap();
-    let _ = a.close().await;
-    let _ = b.close().await;
+    let mut a = a_rx.unsplit(a_tx);
+    let mut b = b_rx.unsplit(b_tx);
+    let _ = a.shutdown().await;
+    let _ = b.shutdown().await;
 }
 
 #[derive(Deserialize)]
@@ -114,7 +130,7 @@ async fn run_proxy<I: ProxyAcceptor, O: ProxyConnector + 'static>(
         match acceptor.accept().await {
             Ok(AcceptResult::Tcp((inbound, addr))) => {
                 let connector = connector.clone();
-                smol::spawn(async move {
+                tokio::spawn(async move {
                     match connector.connect_tcp(&addr).await {
                         Ok(outbound) => {
                             relay_tcp(inbound, outbound).await;
@@ -127,12 +143,11 @@ async fn run_proxy<I: ProxyAcceptor, O: ProxyConnector + 'static>(
                             );
                         }
                     }
-                })
-                .detach();
+                });
             }
             Ok(AcceptResult::Udp(inbound)) => {
                 let connector = connector.clone();
-                smol::spawn(async move {
+                tokio::spawn(async move {
                     match connector.connect_udp().await {
                         Ok(outbound) => {
                             relay_udp(inbound, outbound).await;
@@ -141,8 +156,7 @@ async fn run_proxy<I: ProxyAcceptor, O: ProxyConnector + 'static>(
                             log::error!("failed to relay tcp connection: {}", e.to_string());
                         }
                     }
-                })
-                .detach();
+                });
             }
             Err(e) => {
                 log::error!("accept failed: {}", e);

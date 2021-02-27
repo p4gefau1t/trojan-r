@@ -1,10 +1,13 @@
+use tokio_rustls::rustls::{
+    internal::pemfile, Certificate, CipherSuite, PrivateKey, SupportedCipherSuite, ALL_CIPHERSUITES,
+};
+
 use crate::error::Error;
-use rustls::internal::pemfile;
-use rustls::{Certificate, CipherSuite, PrivateKey, SupportedCipherSuite};
-use std::fs::File;
-use std::io;
-use std::io::BufReader;
-use std::path::Path;
+use std::{
+    fs::File,
+    io::{self, BufReader},
+    path::Path,
+};
 
 pub mod acceptor;
 pub mod connector;
@@ -78,14 +81,14 @@ fn get_cipher_name(cipher: &SupportedCipherSuite) -> &'static str {
 
 fn get_cipher_suite(cipher: Option<Vec<String>>) -> io::Result<Vec<&'static SupportedCipherSuite>> {
     if cipher.is_none() {
-        return Ok(rustls::ALL_CIPHERSUITES.to_vec());
+        return Ok(ALL_CIPHERSUITES.to_vec());
     }
     let cipher = cipher.unwrap();
     let mut result = Vec::new();
 
     for name in cipher {
         let mut found = false;
-        for i in rustls::ALL_CIPHERSUITES.to_vec() {
+        for i in ALL_CIPHERSUITES.to_vec() {
             if name == get_cipher_name(i) {
                 result.push(i);
                 found = true;

@@ -1,56 +1,56 @@
-use std::{io, pin::Pin, task::Context, task::Poll};
+use std::{io, pin::Pin, sync::Arc, task::Context, task::Poll};
 
 use async_trait::async_trait;
-use pin_project::pin_project;
-use smol::net::{TcpStream, UdpSocket};
-use smol::prelude::*;
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::{TcpStream, UdpSocket},
+};
 
 use super::ProxyTcpStream;
 use crate::protocol::{Address, ProxyUdpStream, UdpRead, UdpWrite};
 
 pub mod connector;
 
-#[pin_project]
 pub struct DirectTcpStream {
-    #[pin]
     inner: TcpStream,
 }
 
 impl AsyncRead for DirectTcpStream {
     fn poll_read(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
-        self.project().inner.poll_read(cx, buf)
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read(cx, buf)
     }
 }
 
 impl AsyncWrite for DirectTcpStream {
     fn poll_write(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        self.project().inner.poll_write(cx, buf)
+        Pin::new(&mut self.inner).poll_write(cx, buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.project().inner.poll_flush(cx)
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<io::Result<()>> {
-        self.project().inner.poll_close(cx)
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
     }
 }
 
 impl ProxyTcpStream for DirectTcpStream {}
 
-#[pin_project]
 #[derive(Clone)]
 pub struct DirectUdpStream {
-    #[pin]
-    inner: UdpSocket,
+    inner: Arc<UdpSocket>,
 }
 
 #[async_trait]

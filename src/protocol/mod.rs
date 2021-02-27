@@ -1,21 +1,16 @@
 use async_trait::async_trait;
 use bytes::{Buf, BufMut, BytesMut};
-use smol::prelude::*;
+use fmt::Debug;
 use std::{
-    fmt,
+    fmt::{self, Formatter},
     io::{self, Cursor},
-    net::Ipv4Addr,
-    net::Ipv6Addr,
-    net::SocketAddr,
-    net::SocketAddrV4,
-    net::SocketAddrV6,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
+    str::FromStr,
     vec,
 };
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::error::Error;
-use std::fmt::{Debug, Formatter};
-use std::net::ToSocketAddrs;
-use std::str::FromStr;
 
 pub mod direct;
 pub mod dokodemo;
@@ -28,7 +23,7 @@ fn new_error<T: ToString>(message: T) -> io::Error {
     return Error::new(format!("protocol: {}", message.to_string())).into();
 }
 
-pub trait ProxyTcpStream: AsyncRead + AsyncWrite + Send + Unpin {}
+pub trait ProxyTcpStream: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Address {
     /// Socket address (IP Address)

@@ -1,9 +1,12 @@
-use super::{new_error, WebSocketRWStream};
+use super::{new_error, BinaryWsStream};
 use crate::protocol::{DummyUdpStream, ProxyConnector};
 use async_trait::async_trait;
-use async_tungstenite::tungstenite::http::{StatusCode, Uri};
 use serde::Deserialize;
 use std::io;
+use tokio_tungstenite::{
+    client_async,
+    tungstenite::http::{StatusCode, Uri},
+};
 
 #[derive(Deserialize)]
 pub struct WebSocketConnectorConfig {
@@ -17,18 +20,18 @@ pub struct WebSocketConnector<T: ProxyConnector> {
 
 #[async_trait]
 impl<T: ProxyConnector> ProxyConnector for WebSocketConnector<T> {
-    type TS = WebSocketRWStream<T::TS>;
+    type TS = BinaryWsStream<T::TS>;
     type US = DummyUdpStream;
 
     async fn connect_tcp(&self, addr: &crate::protocol::Address) -> io::Result<Self::TS> {
         let stream = self.inner.connect_tcp(addr).await?;
-        let (stream, resp) = async_tungstenite::client_async(&self.uri, stream)
+        let (stream, resp) = client_async(&self.uri, stream)
             .await
             .map_err(|e| new_error(e))?;
         if resp.status() != StatusCode::SWITCHING_PROTOCOLS {
             return Err(new_error(format!("bad status: {}", resp.status())));
         }
-        let stream = WebSocketRWStream::new(stream);
+        let stream = BinaryWsStream::new(stream);
         Ok(stream)
     }
 

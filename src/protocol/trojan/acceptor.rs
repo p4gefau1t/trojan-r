@@ -1,13 +1,15 @@
-use crate::protocol::trojan::header::{Command, TrojanRequestHeader};
-use crate::protocol::trojan::{new_error, password_to_hash, TrojanUdpStream};
-use crate::protocol::{AcceptResult, Address, ProxyAcceptor};
+use super::new_error;
+use crate::protocol::{
+    trojan::header::{Command, TrojanRequestHeader},
+    AcceptResult, Address, ProxyAcceptor,
+};
 use crate::proxy::relay_tcp;
 use async_trait::async_trait;
 use serde::Deserialize;
-use smol::io::AsyncWriteExt;
-use smol::net::TcpStream;
-use std::io;
-use std::str::FromStr;
+use std::{io, str::FromStr};
+use tokio::{io::AsyncWriteExt, net::TcpStream};
+
+use super::{password_to_hash, TrojanUdpStream};
 
 #[derive(Deserialize)]
 pub struct TrojanAcceptorConfig {
@@ -43,13 +45,12 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
             Err(e) => {
                 let fallback_addr = self.fallback_addr.clone();
                 log::warn!("fallback to {}", fallback_addr);
-                smol::spawn(async move {
+                tokio::spawn(async move {
                     let inbound = stream;
                     let mut outbound = TcpStream::connect(fallback_addr.to_string()).await.unwrap();
                     let _ = outbound.write(&first_packet).await;
                     relay_tcp(inbound, outbound).await;
-                })
-                .detach();
+                });
                 Err(new_error(format!("invalid packet: {}", e.to_string())))
             }
         }

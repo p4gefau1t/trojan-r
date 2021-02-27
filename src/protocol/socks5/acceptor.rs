@@ -1,59 +1,50 @@
-use crate::protocol::socks5::header::{
-    Command, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader,
-    UdpAssociateHeader,
-};
-use crate::protocol::socks5::{header, new_error};
+use super::{header, new_error};
 use crate::protocol::{
+    socks5::header::{
+        Command, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader,
+        UdpAssociateHeader,
+    },
     AcceptResult, Address, ProxyAcceptor, ProxyTcpStream, ProxyUdpStream, UdpRead, UdpWrite,
 };
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
-use futures::FutureExt;
-use futures::{pin_mut, select};
 use serde::Deserialize;
-use smol::channel::Receiver;
-use smol::io::AsyncReadExt;
-use smol::lock::RwLock;
-use smol::net::{TcpListener, TcpStream, UdpSocket};
-use std::io;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{io, net::SocketAddr, sync::Arc};
+use tokio::{
+    io::AsyncReadExt,
+    net::{TcpListener, TcpStream, UdpSocket},
+    sync::{
+        broadcast::{channel, Receiver, Sender},
+        RwLock,
+    },
+};
 
 #[derive(Deserialize)]
 pub struct Socks5AcceptorConfig {
     pub addr: String,
 }
 
-#[derive(Clone)]
 pub struct Socks5UdpStream {
     src_addr: Arc<RwLock<Option<SocketAddr>>>,
-    inner: UdpSocket,
-    shutdown: Receiver<()>,
+    inner: Arc<UdpSocket>,
+    shutdown_tx: Sender<()>,
+    shutdown_rx: Receiver<()>,
 }
 
 #[async_trait]
 impl UdpRead for Socks5UdpStream {
     async fn read_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, Address)> {
+        // TODO max buffer size
         let mut recv_buf = [0u8; 1024 * 8];
-
-        let result = {
-            let fut1 = self.inner.recv_from(&mut recv_buf).fuse();
-            let fut2 = self.shutdown.recv().fuse();
-            pin_mut!(fut1);
-            pin_mut!(fut2);
-
-            let result: io::Result<(usize, SocketAddr)> = select! {
-                result = fut1 => {
-                    result
-                },
-                _ = fut2 => {
-                    Err(new_error("udp socket closed"))
-                },
-            };
-            result
+        //self.shutdown_rx.recv
+        let (recv_len, addr) = tokio::select! {
+            result = self.inner.recv_from(&mut recv_buf) => {
+                result?
+            }
+            _ = self.shutdown_rx.recv() => {
+                return Err(io::ErrorKind::ConnectionReset.into());
+            }
         };
-
-        let (recv_len, addr) = result?;
 
         let src_address = self.src_addr.read().await.clone();
         if src_address.is_none() {
@@ -95,7 +86,14 @@ impl ProxyUdpStream for Socks5UdpStream {
     type W = Self;
 
     fn split(self) -> (Self::R, Self::W) {
-        (self.clone(), self.clone())
+        let a = self;
+        let b = Self {
+            src_addr: a.src_addr.clone(),
+            inner: a.inner.clone(),
+            shutdown_rx: a.shutdown_tx.subscribe(),
+            shutdown_tx: a.shutdown_tx.clone(),
+        };
+        (a, b)
     }
 
     fn reunite(r: Self::R, _: Self::W) -> Self {
@@ -155,26 +153,29 @@ impl ProxyAcceptor for Socks5Acceptor {
                 log::debug!("udp associate");
                 let ip = self.tcp_listener.local_addr().unwrap().ip();
                 let socket_addr = SocketAddr::new(ip, 0);
-                let udp_socket = UdpSocket::bind(socket_addr).await?;
+                let udp_socket = Arc::new(UdpSocket::bind(socket_addr).await?);
                 let resp = TcpResponseHeader::new(Address::SocketAddress(udp_socket.local_addr()?));
                 log::debug!(
                     "udp socket listening on {}",
                     udp_socket.local_addr().unwrap()
                 );
+                let (shutdown_tx, shutdown_rx) = channel(16);
                 resp.write_to(&mut stream).await?;
-                // keep tcp connection alive
-                let (shutdown_tx, shutdown_rx) = smol::channel::bounded(1);
-                smol::spawn(async move {
-                    let mut buf = [0u8; 0x10];
-                    let _ = stream.read(&mut buf).await;
-                    let _ = shutdown_tx.send(()).await;
-                    log::debug!("shutting down udp session..");
-                })
-                .detach();
+                {
+                    let shutdown_tx = shutdown_tx.clone();
+                    // keep tcp connection alive
+                    tokio::spawn(async move {
+                        let mut buf = [0u8; 0x10];
+                        let _ = stream.read(&mut buf).await;
+                        log::debug!("shutting down udp session..");
+                        let _ = shutdown_tx.send(());
+                    });
+                }
                 Ok(AcceptResult::Udp(Socks5UdpStream {
                     inner: udp_socket,
                     src_addr: Arc::new(RwLock::new(None)),
-                    shutdown: shutdown_rx,
+                    shutdown_rx,
+                    shutdown_tx,
                 }))
             }
         };

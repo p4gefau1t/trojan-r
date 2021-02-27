@@ -1,10 +1,15 @@
 use crate::protocol::{AcceptResult, Address, ProxyAcceptor, ProxyUdpStream, UdpRead, UdpWrite};
 use async_trait::async_trait;
 use serde::Deserialize;
-use smol::net::{TcpListener, TcpStream, UdpSocket};
-use std::io::Result;
-use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    io::Result,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
+use tokio::net::{TcpListener, TcpStream, UdpSocket};
 
 #[derive(Deserialize)]
 pub struct DokodemoAcceptorConfig {
@@ -14,7 +19,7 @@ pub struct DokodemoAcceptorConfig {
 
 #[derive(Clone)]
 pub struct DokodemoUdpStream {
-    inner: UdpSocket,
+    inner: Arc<UdpSocket>,
     addr: Address,
 }
 
@@ -66,7 +71,7 @@ impl ProxyAcceptor for DokodemoAcceptor {
     async fn accept(&self) -> Result<AcceptResult<Self::TS, Self::US>> {
         if !self.udp_spawned.load(Ordering::Relaxed) {
             self.udp_spawned.store(true, Ordering::Relaxed);
-            let socket = UdpSocket::bind(self.tcp_listener.local_addr().unwrap()).await?;
+            let socket = Arc::new(UdpSocket::bind(self.tcp_listener.local_addr().unwrap()).await?);
             let udp_stream = DokodemoUdpStream {
                 inner: socket,
                 addr: self.target_addr.clone(),

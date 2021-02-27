@@ -1,6 +1,7 @@
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
 use super::new_error;
 use crate::protocol::Address;
-use smol::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use std::io;
 
 mod consts {

@@ -1,13 +1,16 @@
-use crate::protocol::tls::{get_cipher_suite, load_cert, load_key, new_error};
-use crate::protocol::{AcceptResult, Address, DummyUdpStream, ProxyAcceptor, ProxyTcpStream};
-use async_tls::server::TlsStream;
-use async_tls::TlsAcceptor;
+use crate::protocol::{
+    tls::{get_cipher_suite, load_cert, load_key, new_error},
+    AcceptResult, Address, DummyUdpStream, ProxyAcceptor, ProxyTcpStream,
+};
 use async_trait::async_trait;
-use rustls::{NoClientAuth, ServerConfig};
 use serde::Deserialize;
-use smol::net::{TcpListener, TcpStream};
-use std::io;
-use std::path::Path;
+use std::{io, path::Path, sync::Arc};
+use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::{
+    rustls::{NoClientAuth, ServerConfig},
+    server::TlsStream,
+    TlsAcceptor,
+};
 
 #[derive(Deserialize)]
 pub struct TrojanTlsAcceptorConfig {
@@ -54,7 +57,7 @@ impl TrojanTlsAcceptor {
 
         tls_config.ciphersuites = get_cipher_suite(config.cipher.clone())?;
 
-        let tls_acceptor = TlsAcceptor::from(tls_config);
+        let tls_acceptor = TlsAcceptor::from(Arc::new(tls_config));
         Ok(Self {
             tcp_listener,
             tls_acceptor,
