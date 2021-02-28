@@ -23,3 +23,10 @@ futures-util = "0.3"
 
 [profile.release]
 lto = true
+
+[features]
+default = ["full"]
+client = []
+server = []
+forward = []
+full = ["client", "server", "forward"]

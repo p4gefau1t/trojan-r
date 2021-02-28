@@ -106,7 +106,7 @@ make armv7-unknown-linux-musleabihf
 
 - [ ] 实现 lib.rs 和导出函数
 
-- [ ] 分离客户端和服务端 features
+- [x] 分离客户端和服务端 features
 
 - [ ] Github Actions
 

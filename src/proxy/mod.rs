@@ -198,6 +198,7 @@ pub async fn launch_from_config_string(config_string: String) -> io::Result<()> 
             .try_init();
     }
     match config.mode.as_str() {
+        #[cfg(feature = "server")]
         "server" => {
             log::debug!("server mode");
             let config: ServerConfig = toml::from_str(&config_string)?;
@@ -229,6 +230,7 @@ pub async fn launch_from_config_string(config_string: String) -> io::Result<()> 
                 }
             }
         }
+        #[cfg(feature = "client")]
         "client" => {
             log::debug!("client mode");
             let config: ClientConfig = toml::from_str(&config_string)?;
@@ -244,6 +246,7 @@ pub async fn launch_from_config_string(config_string: String) -> io::Result<()> 
                 run_proxy(socks5_acceptor, trojan_connector).await?;
             }
         }
+        #[cfg(feature = "forward")]
         "forward" => {
             log::debug!("forward mode");
             let config: ForwardConfig = toml::from_str(&config_string)?;
