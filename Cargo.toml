@@ -14,7 +14,6 @@ sha2 = "0.9"
 serde = { version = "1.0", features = ["derive"] } 
 env_logger = "0.8"
 toml = "0.5"
-num_cpus = "1.13"
 clap = "2.33"
 webpki = "0.21"
 webpki-roots = "0.21"

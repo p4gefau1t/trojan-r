@@ -11,7 +11,10 @@ use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use crate::{
     error::Error,
     protocol::{
-        direct::connector::DirectConnector,
+        direct::{
+            acceptor::{DirectAcceptor, DirectAcceptorConfig},
+            connector::DirectConnector,
+        },
         dokodemo::acceptor::{DokodemoAcceptor, DokodemoAcceptorConfig},
         socks5::acceptor::{Socks5Acceptor, Socks5AcceptorConfig},
         tls::{
@@ -31,8 +34,10 @@ use crate::{
     },
 };
 
+const RELAY_BUFFER_SIZE: usize = 0x4000;
+
 async fn copy_udp<R: UdpRead, W: UdpWrite>(r: &mut R, w: &mut W) -> io::Result<()> {
-    let mut buf = [0u8; 1024 * 8];
+    let mut buf = [0u8; RELAY_BUFFER_SIZE];
     loop {
         let (size, addr) = r.read_from(&mut buf).await?;
         if size == 0 {
@@ -47,13 +52,13 @@ async fn copy_tcp<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     r: &mut R,
     w: &mut W,
 ) -> io::Result<()> {
-    let mut buf = [0u8; 1024 * 32];
+    let mut buf = [0u8; RELAY_BUFFER_SIZE];
     loop {
         let size = r.read(&mut buf).await?;
         if size == 0 {
             break;
         }
-        w.write_all(&buf[..size]).await?;
+        w.write(&buf[..size]).await?;
     }
     Ok(())
 }
@@ -109,7 +114,8 @@ struct ClientConfig {
 #[derive(Deserialize)]
 struct ServerConfig {
     trojan: TrojanAcceptorConfig,
-    tls: TrojanTlsAcceptorConfig,
+    tls: Option<TrojanTlsAcceptorConfig>,
+    direct: Option<DirectAcceptorConfig>,
     websocket: Option<WebSocketAcceptorConfig>,
 }
 
@@ -196,14 +202,31 @@ pub async fn launch_from_config_string(config_string: String) -> io::Result<()> 
             log::debug!("server mode");
             let config: ServerConfig = toml::from_str(&config_string)?;
             let direct_connector = DirectConnector {};
-            let tls_acceptor = TrojanTlsAcceptor::new(&config.tls).await?;
-            if config.websocket.is_none() {
-                let trojan_acceptor = TrojanAcceptor::new(&config.trojan, tls_acceptor)?;
-                run_proxy(trojan_acceptor, direct_connector).await?;
+            if config.tls.is_none() {
+                if config.direct.is_none() {
+                    return Err(Error::new("direct/tls section not found").into());
+                }
+                let direct_acceptor = DirectAcceptor::new(&config.direct.unwrap()).await?;
+                if config.websocket.is_none() {
+                    let trojan_acceptor = TrojanAcceptor::new(&config.trojan, direct_acceptor)?;
+                    run_proxy(trojan_acceptor, direct_connector).await?;
+                } else {
+                    let ws_acceptor =
+                        WebSocketAcceptor::new(&config.websocket.unwrap(), direct_acceptor)?;
+                    let trojan_acceptor = TrojanAcceptor::new(&config.trojan, ws_acceptor)?;
+                    run_proxy(trojan_acceptor, direct_connector).await?;
+                }
             } else {
-                let ws_acceptor = WebSocketAcceptor::new(&config.websocket.unwrap(), tls_acceptor)?;
-                let trojan_acceptor = TrojanAcceptor::new(&config.trojan, ws_acceptor)?;
-                run_proxy(trojan_acceptor, direct_connector).await?;
+                let tls_acceptor = TrojanTlsAcceptor::new(&config.tls.unwrap()).await?;
+                if config.websocket.is_none() {
+                    let trojan_acceptor = TrojanAcceptor::new(&config.trojan, tls_acceptor)?;
+                    run_proxy(trojan_acceptor, direct_connector).await?;
+                } else {
+                    let ws_acceptor =
+                        WebSocketAcceptor::new(&config.websocket.unwrap(), tls_acceptor)?;
+                    let trojan_acceptor = TrojanAcceptor::new(&config.trojan, ws_acceptor)?;
+                    run_proxy(trojan_acceptor, direct_connector).await?;
+                }
             }
         }
         "client" => {

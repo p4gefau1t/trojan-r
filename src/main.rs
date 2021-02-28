@@ -9,7 +9,7 @@ mod proxy;
 #[tokio::main]
 async fn main() {
     let matches = App::new("trojan-r")
-        .version("v0.0.1")
+        .version("v0.1.0")
         .arg(
             Arg::with_name("config")
                 .short("c")

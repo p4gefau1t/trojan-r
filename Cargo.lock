@@ -747,7 +747,6 @@ dependencies = [
  "futures-core",
  "futures-util",
  "log",
- "num_cpus",
  "serde",
  "sha2",
  "tokio",

@@ -15,7 +15,6 @@ impl ProxyConnector for DirectConnector {
     type US = DirectUdpStream;
 
     async fn connect_tcp(&self, addr: &Address) -> std::io::Result<Self::TS> {
-        // TODO to_string
         log::debug!("direct: connecting to {}", addr);
         let stream = TcpStream::connect(addr.to_string()).await?;
         Ok(DirectTcpStream { inner: stream })

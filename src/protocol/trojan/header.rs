@@ -71,7 +71,6 @@ pub struct TrojanRequestHeader {
 
 impl TrojanRequestHeader {
     pub fn new(hash: &String, command: Command, address: &Address) -> Self {
-        // TODO use reference
         Self {
             hash: hash.clone(),
             command,

@@ -31,12 +31,12 @@ pub struct Socks5UdpStream {
     shutdown_rx: Receiver<()>,
 }
 
+const UDP_BUFFER_SIZE: usize = 0x2000;
+
 #[async_trait]
 impl UdpRead for Socks5UdpStream {
     async fn read_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, Address)> {
-        // TODO max buffer size
-        let mut recv_buf = [0u8; 1024 * 8];
-        //self.shutdown_rx.recv
+        let mut recv_buf = [0u8; UDP_BUFFER_SIZE];
         let (recv_len, addr) = tokio::select! {
             result = self.inner.recv_from(&mut recv_buf) => {
                 result?

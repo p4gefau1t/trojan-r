@@ -62,13 +62,12 @@ impl ProxyConnector for TrojanTlsConnector {
 
     async fn connect_tcp(&self, _: &Address) -> io::Result<Self::TS> {
         let stream = TcpStream::connect(&self.server_addr).await?;
-        // TODO: try_from
+        let dns_name = DNSNameRef::try_from_ascii_str(&self.sni)
+            .map_err(|e| io::Error::new(io::ErrorKind::NotFound, e.to_string()))?;
         let stream = TlsConnector::from(self.tls_config.clone())
-            .connect(
-                DNSNameRef::try_from_ascii_str(&self.sni.clone()).unwrap(),
-                stream,
-            )
+            .connect(dns_name, stream)
             .await?;
+
         log::info!("tls: connected to {}", self.server_addr);
         Ok(stream)
     }

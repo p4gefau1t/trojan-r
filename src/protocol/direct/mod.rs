@@ -9,6 +9,7 @@ use tokio::{
 use super::ProxyTcpStream;
 use crate::protocol::{Address, ProxyUdpStream, UdpRead, UdpWrite};
 
+pub mod acceptor;
 pub mod connector;
 
 pub struct DirectTcpStream {
