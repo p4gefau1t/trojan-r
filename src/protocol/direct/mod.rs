@@ -9,11 +9,16 @@ use tokio::{
 use super::ProxyTcpStream;
 use crate::protocol::{Address, ProxyUdpStream, UdpRead, UdpWrite};
 
-pub mod acceptor;
 pub mod connector;
 
 pub struct DirectTcpStream {
     inner: TcpStream,
+}
+
+impl DirectTcpStream {
+    pub fn new(inner: TcpStream) -> Self {
+        Self { inner }
+    }
 }
 
 impl AsyncRead for DirectTcpStream {

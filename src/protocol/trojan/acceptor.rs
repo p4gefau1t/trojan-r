@@ -1,20 +1,20 @@
-use super::new_error;
-use crate::protocol::{
-    trojan::header::{Command, TrojanRequestHeader},
-    AcceptResult, Address, ProxyAcceptor,
-};
-use crate::proxy::relay_tcp;
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::{io, str::FromStr};
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
-use super::{password_to_hash, TrojanUdpStream};
+use crate::protocol::{
+    trojan::{Command, RequestHeader},
+    AcceptResult, Address, ProxyAcceptor,
+};
+use crate::proxy::relay_tcp;
+
+use super::{new_error, password_to_hash, TrojanUdpStream};
 
 #[derive(Deserialize)]
 pub struct TrojanAcceptorConfig {
-    pub password: String,
-    pub fallback_addr: String,
+    password: String,
+    fallback_addr: String,
 }
 
 pub struct TrojanAcceptor<T: ProxyAcceptor> {
@@ -30,8 +30,7 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
     async fn accept(&self) -> io::Result<AcceptResult<Self::TS, Self::US>> {
         let (mut stream, addr) = self.inner.accept().await?.unwrap_tcp_with_addr();
         let mut first_packet = Vec::new();
-        match TrojanRequestHeader::read_from(&mut stream, &self.valid_hash, &mut first_packet).await
-        {
+        match RequestHeader::read_from(&mut stream, &self.valid_hash, &mut first_packet).await {
             Ok(header) => {
                 log::info!("trojan connection from {}, user = {}", addr, header.hash);
                 match header.command {

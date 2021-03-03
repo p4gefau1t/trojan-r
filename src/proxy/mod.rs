@@ -11,15 +11,13 @@ use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use crate::{
     error::Error,
     protocol::{
-        direct::{
-            acceptor::{DirectAcceptor, DirectAcceptorConfig},
-            connector::DirectConnector,
-        },
+        direct::connector::DirectConnector,
         dokodemo::acceptor::{DokodemoAcceptor, DokodemoAcceptorConfig},
         mux::{
             acceptor::{MuxAcceptor, MuxAcceptorConfig},
             connector::{MuxConnector, MuxConnectorConfig},
         },
+        plaintext::acceptor::{PlaintextAcceptor, PlaintextAcceptorConfig},
         socks5::acceptor::{Socks5Acceptor, Socks5AcceptorConfig},
         tls::{
             acceptor::{TrojanTlsAcceptor, TrojanTlsAcceptorConfig},
@@ -120,7 +118,7 @@ struct ClientConfig {
 struct ServerConfig {
     trojan: TrojanAcceptorConfig,
     tls: Option<TrojanTlsAcceptorConfig>,
-    direct: Option<DirectAcceptorConfig>,
+    plaintext: Option<PlaintextAcceptorConfig>,
     websocket: Option<WebSocketAcceptorConfig>,
     mux: Option<MuxAcceptorConfig>,
 }
@@ -210,16 +208,16 @@ pub async fn launch_from_config_string(config_string: String) -> io::Result<()> 
             let config: ServerConfig = toml::from_str(&config_string)?;
             let direct_connector = DirectConnector {};
             if config.tls.is_none() {
-                if config.direct.is_none() {
+                if config.plaintext.is_none() {
                     return Err(Error::new("direct/tls section not found").into());
                 }
-                let direct_acceptor = DirectAcceptor::new(&config.direct.unwrap()).await?;
+                let direct_acceptor = PlaintextAcceptor::new(&config.plaintext.unwrap()).await?;
                 if config.websocket.is_none() {
                     let trojan_acceptor = TrojanAcceptor::new(&config.trojan, direct_acceptor)?;
                     if config.mux.is_none() {
                         run_proxy(trojan_acceptor, direct_connector).await?;
                     } else {
-                        let mux_acceptor = MuxAcceptor::new(trojan_acceptor);
+                        let mux_acceptor = MuxAcceptor::new(trojan_acceptor, &config.mux.unwrap())?;
                         run_proxy(mux_acceptor, direct_connector).await?;
                     }
                 } else {
@@ -229,7 +227,7 @@ pub async fn launch_from_config_string(config_string: String) -> io::Result<()> 
                     if config.mux.is_none() {
                         run_proxy(trojan_acceptor, direct_connector).await?;
                     } else {
-                        let mux_acceptor = MuxAcceptor::new(trojan_acceptor);
+                        let mux_acceptor = MuxAcceptor::new(trojan_acceptor, &config.mux.unwrap())?;
                         run_proxy(mux_acceptor, direct_connector).await?;
                     }
                 }
@@ -240,7 +238,7 @@ pub async fn launch_from_config_string(config_string: String) -> io::Result<()> 
                     if config.mux.is_none() {
                         run_proxy(trojan_acceptor, direct_connector).await?;
                     } else {
-                        let mux_acceptor = MuxAcceptor::new(trojan_acceptor);
+                        let mux_acceptor = MuxAcceptor::new(trojan_acceptor, &config.mux.unwrap())?;
                         run_proxy(mux_acceptor, direct_connector).await?;
                     }
                 } else {
@@ -250,7 +248,7 @@ pub async fn launch_from_config_string(config_string: String) -> io::Result<()> 
                     if config.mux.is_none() {
                         run_proxy(trojan_acceptor, direct_connector).await?;
                     } else {
-                        let mux_acceptor = MuxAcceptor::new(trojan_acceptor);
+                        let mux_acceptor = MuxAcceptor::new(trojan_acceptor, &config.mux.unwrap())?;
                         run_proxy(mux_acceptor, direct_connector).await?;
                     }
                 }

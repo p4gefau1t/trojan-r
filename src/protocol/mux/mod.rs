@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use bytes::{Buf, BufMut, Bytes};
 use futures_core::{ready, Future};
 use futures_util::FutureExt;
-use header::SimpleSocksUdpHeader;
 use tokio::{
     io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     sync::{
@@ -34,7 +33,6 @@ use crate::error::Error;
 
 pub mod acceptor;
 pub mod connector;
-pub mod header;
 
 fn new_error<T: ToString>(message: T) -> io::Error {
     return Error::new(format!("mux: {}", message.to_string())).into();
@@ -52,6 +50,117 @@ const CMD_NOP: u8 = 3;
 const SHARED_CHANNEL_LEN: usize = 0x200;
 const PRIVATE_CHANNEL_LEN: usize = 0x50;
 const STREAM_CHANNEL_LEN: usize = 0x20;
+
+const CMD_TCP_CONNECT: u8 = 0x01;
+const CMD_UDP_ASSOCIATE: u8 = 0x03;
+
+#[derive(Clone, Debug, Copy, Eq, PartialEq)]
+pub enum Command {
+    /// CONNECT command (TCP tunnel)
+    TcpConnect,
+    /// UDP ASSOCIATE command
+    UdpAssociate,
+}
+
+impl Command {
+    #[inline]
+    fn as_u8(self) -> u8 {
+        match self {
+            Command::TcpConnect => CMD_TCP_CONNECT,
+            Command::UdpAssociate => CMD_UDP_ASSOCIATE,
+        }
+    }
+
+    #[inline]
+    fn from_u8(code: u8) -> io::Result<Command> {
+        match code {
+            CMD_TCP_CONNECT => Ok(Command::TcpConnect),
+            CMD_UDP_ASSOCIATE => Ok(Command::UdpAssociate),
+            _ => Err(new_error(format!("invalid request command: {}", code))),
+        }
+    }
+}
+
+struct RequestHeader {
+    command: Command,
+    address: Address,
+}
+
+impl RequestHeader {
+    pub fn new(command: Command, address: &Address) -> Self {
+        Self {
+            command,
+            address: address.clone(),
+        }
+    }
+
+    pub async fn read_from<R>(stream: &mut R) -> io::Result<Self>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let mut cmd = [0u8; 1];
+        stream.read_exact(&mut cmd).await?;
+        let command = Command::from_u8(cmd[0])?;
+        let address = Address::read_from_stream(stream).await?;
+        Ok(Self { command, address })
+    }
+
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        let cmd = [self.command.as_u8()];
+        w.write(&cmd).await?;
+        self.address.write_to_stream(w).await?;
+        Ok(())
+    }
+}
+
+/// ```plain
+/// +------+----------+----------+--------+---------+----------+
+/// | ATYP | DST.ADDR | DST.PORT | Length |  CRLF   | Payload  |
+/// +------+----------+----------+--------+---------+----------+
+/// |  1   | Variable |    2     |   2    | X'0D0A' | Variable |
+/// +------+----------+----------+--------+---------+----------+
+/// ```
+struct UdpHeader {
+    pub address: Address,
+    pub payload_len: u16,
+}
+
+impl UdpHeader {
+    pub fn new(address: &Address, payload_len: usize) -> Self {
+        Self {
+            address: address.clone(),
+            payload_len: payload_len as u16,
+        }
+    }
+
+    pub async fn read_from<R>(stream: &mut R) -> io::Result<Self>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let address = Address::read_from_stream(stream).await?;
+        log::debug!("udp addr read: {}", address);
+        let mut len = [0u8; 2];
+        stream.read_exact(&mut len).await?;
+        let len = ((len[0] as u16) << 8) | (len[1] as u16);
+        Ok(Self {
+            address,
+            payload_len: len,
+        })
+    }
+
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        self.address.write_to_stream(w).await?;
+        self.payload_len.to_be_bytes();
+        w.write(&self.payload_len.to_be_bytes()).await?;
+        Ok(())
+    }
+}
 
 struct SyncFrame {
     stream_id: u32,
@@ -323,7 +432,7 @@ impl ProxyTcpStream for MuxStream {}
 #[async_trait]
 impl UdpRead for MuxStreamReadHalf {
     async fn read_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, Address)> {
-        let udp_header = SimpleSocksUdpHeader::read_from(self).await?;
+        let udp_header = UdpHeader::read_from(self).await?;
         let len = min(udp_header.payload_len as usize, buf.len());
         self.read_exact(&mut buf[..len]).await?;
         Ok((len, udp_header.address))
@@ -334,7 +443,7 @@ impl UdpRead for MuxStreamReadHalf {
 impl UdpWrite for MuxStreamWriteHalf {
     async fn write_to(&mut self, buf: &[u8], addr: &Address) -> io::Result<()> {
         let len = min(buf.len(), MAX_DATA_LEN);
-        let udp_header = SimpleSocksUdpHeader::new(addr, len);
+        let udp_header = UdpHeader::new(addr, len);
         udp_header.write_to(self).await?;
         Ok(())
     }

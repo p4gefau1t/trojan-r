@@ -1,11 +1,3 @@
-use super::{header, new_error};
-use crate::protocol::{
-    socks5::header::{
-        Command, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader,
-        UdpAssociateHeader,
-    },
-    AcceptResult, Address, ProxyAcceptor, ProxyTcpStream, ProxyUdpStream, UdpRead, UdpWrite,
-};
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
 use serde::Deserialize;
@@ -19,9 +11,17 @@ use tokio::{
     },
 };
 
+use super::{
+    new_error, Command, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader,
+    UdpAssociateHeader, AUTH_METHOD_NONE,
+};
+use crate::protocol::{
+    AcceptResult, Address, ProxyAcceptor, ProxyTcpStream, ProxyUdpStream, UdpRead, UdpWrite,
+};
+
 #[derive(Deserialize)]
 pub struct Socks5AcceptorConfig {
-    pub addr: String,
+    addr: String,
 }
 
 pub struct Socks5UdpStream {
@@ -129,13 +129,10 @@ impl ProxyAcceptor for Socks5Acceptor {
 
         // 1. handshake
         let req = HandshakeRequest::read_from(&mut stream).await?;
-        if !req
-            .methods
-            .contains(&header::consts::SOCKS5_AUTH_METHOD_NONE)
-        {
+        if !req.methods.contains(&AUTH_METHOD_NONE) {
             return Err(new_error("invalid handshake method"));
         }
-        let resp = HandshakeResponse::new(header::consts::SOCKS5_AUTH_METHOD_NONE);
+        let resp = HandshakeResponse::new(AUTH_METHOD_NONE);
         resp.write_to(&mut stream).await?;
 
         // 2. parse

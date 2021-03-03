@@ -1,9 +1,10 @@
-use crate::protocol::trojan::header::{Command, TrojanRequestHeader};
-use crate::protocol::trojan::{new_error, password_to_hash, TrojanUdpStream};
-use crate::protocol::{Address, ProxyConnector};
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::io;
+
+use crate::protocol::{Address, ProxyConnector};
+
+use super::{new_error, password_to_hash, Command, RequestHeader, TrojanUdpStream};
 
 #[derive(Deserialize)]
 pub struct TrojanConnectorConfig {
@@ -32,7 +33,7 @@ impl<T: ProxyConnector> ProxyConnector for TrojanConnector<T> {
 
     async fn connect_tcp(&self, addr: &Address) -> io::Result<Self::TS> {
         let mut stream = self.inner.connect_tcp(addr).await?;
-        let header = TrojanRequestHeader::new(&self.hash, Command::TcpConnect, addr);
+        let header = RequestHeader::new(&self.hash, Command::TcpConnect, addr);
         header.write_to(&mut stream).await?;
         Ok(stream)
     }
@@ -40,7 +41,7 @@ impl<T: ProxyConnector> ProxyConnector for TrojanConnector<T> {
     async fn connect_udp(&self) -> io::Result<Self::US> {
         let dummy_addr = Address::DomainNameAddress(String::from("UDP_CONN"), 0);
         let mut stream = self.inner.connect_tcp(&dummy_addr).await?;
-        let header = TrojanRequestHeader::new(&self.hash, Command::UdpAssociate, &dummy_addr);
+        let header = RequestHeader::new(&self.hash, Command::UdpAssociate, &dummy_addr);
         header.write_to(&mut stream).await?;
         Ok(TrojanUdpStream::new(stream))
     }

@@ -12,16 +12,13 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
-use super::{
-    header::{Command, SimpleSocksRequestHeader},
-    new_key, MuxHandle, MuxStream, MuxUdpStream,
-};
+use super::{new_key, Command, MuxHandle, MuxStream, MuxUdpStream, RequestHeader};
 use crate::protocol::{Address, ProxyConnector};
 
 #[derive(Deserialize)]
 pub struct MuxConnectorConfig {
-    pub concurrent: usize,
-    pub timeout: u32,
+    concurrent: usize,
+    timeout: u32,
 }
 
 pub struct MuxConnector<T: ProxyConnector> {
@@ -108,7 +105,7 @@ impl<T: ProxyConnector> ProxyConnector for MuxConnector<T> {
 
     async fn connect_tcp(&self, addr: &Address) -> io::Result<Self::TS> {
         let mut stream = self.spawn_mux_stream().await?;
-        SimpleSocksRequestHeader::new(Command::TcpConnect, addr)
+        RequestHeader::new(Command::TcpConnect, addr)
             .write_to(&mut stream)
             .await?;
         return Ok(stream);
@@ -116,7 +113,7 @@ impl<T: ProxyConnector> ProxyConnector for MuxConnector<T> {
 
     async fn connect_udp(&self) -> io::Result<Self::US> {
         let mut stream = self.spawn_mux_stream().await?;
-        SimpleSocksRequestHeader::new(
+        RequestHeader::new(
             Command::TcpConnect,
             &Address::DomainNameAddress("UDP_CONN".to_string(), 0),
         )

@@ -11,16 +11,11 @@ use tokio::{
     task::JoinHandle,
 };
 
-use super::{
-    header::{Command, SimpleSocksRequestHeader},
-    MuxHandle, MuxStream, MuxUdpStream,
-};
+use super::{Command, MuxHandle, MuxStream, MuxUdpStream, RequestHeader};
 use crate::protocol::{AcceptResult, Address, ProxyAcceptor};
 
 #[derive(Deserialize)]
-pub struct MuxAcceptorConfig {
-    pub timeout: u32,
-}
+pub struct MuxAcceptorConfig {}
 
 pub struct MuxAcceptor {
     accept_stream_rx: Arc<Mutex<Receiver<AcceptResult<MuxStream, MuxUdpStream>>>>,
@@ -48,7 +43,10 @@ impl ProxyAcceptor for MuxAcceptor {
 }
 
 impl MuxAcceptor {
-    pub fn new<T: ProxyAcceptor + 'static>(inner: T) -> Self {
+    pub fn new<T: ProxyAcceptor + 'static>(
+        inner: T,
+        _config: &MuxAcceptorConfig,
+    ) -> io::Result<Self> {
         let (accept_stream_tx, accept_stream_rx) = channel(0x40);
         let handle: JoinHandle<io::Result<()>> = tokio::spawn(async move {
             loop {
@@ -74,8 +72,7 @@ impl MuxAcceptor {
                             loop {
                                 let mut stream = mux_handle.accept().await?;
                                 log::debug!("new mux stream {:x} accepted", stream.stream_id());
-                                let header =
-                                    SimpleSocksRequestHeader::read_from(&mut stream).await?;
+                                let header = RequestHeader::read_from(&mut stream).await?;
                                 let result = match header.command {
                                     Command::TcpConnect => {
                                         AcceptResult::Tcp((stream, header.address))
@@ -97,9 +94,9 @@ impl MuxAcceptor {
                 }
             }
         });
-        Self {
+        Ok(Self {
             accept_stream_rx: Arc::new(Mutex::new(accept_stream_rx)),
             handle,
-        }
+        })
     }
 }

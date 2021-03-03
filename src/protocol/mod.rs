@@ -15,6 +15,7 @@ use crate::error::Error;
 pub mod direct;
 pub mod dokodemo;
 pub mod mux;
+pub mod plaintext;
 pub mod socks5;
 pub mod tls;
 pub mod trojan;
