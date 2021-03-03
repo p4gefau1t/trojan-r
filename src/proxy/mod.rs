@@ -16,6 +16,10 @@ use crate::{
             connector::DirectConnector,
         },
         dokodemo::acceptor::{DokodemoAcceptor, DokodemoAcceptorConfig},
+        mux::{
+            acceptor::{MuxAcceptor, MuxAcceptorConfig},
+            connector::{MuxConnector, MuxConnectorConfig},
+        },
         socks5::acceptor::{Socks5Acceptor, Socks5AcceptorConfig},
         tls::{
             acceptor::{TrojanTlsAcceptor, TrojanTlsAcceptorConfig},
@@ -109,6 +113,7 @@ struct ClientConfig {
     trojan: TrojanConnectorConfig,
     tls: TrojanTlsConnectorConfig,
     websocket: Option<WebSocketConnectorConfig>,
+    mux: Option<MuxConnectorConfig>,
 }
 
 #[derive(Deserialize)]
@@ -117,6 +122,7 @@ struct ServerConfig {
     tls: Option<TrojanTlsAcceptorConfig>,
     direct: Option<DirectAcceptorConfig>,
     websocket: Option<WebSocketAcceptorConfig>,
+    mux: Option<MuxAcceptorConfig>,
 }
 
 #[derive(Deserialize)]
@@ -210,23 +216,43 @@ pub async fn launch_from_config_string(config_string: String) -> io::Result<()> 
                 let direct_acceptor = DirectAcceptor::new(&config.direct.unwrap()).await?;
                 if config.websocket.is_none() {
                     let trojan_acceptor = TrojanAcceptor::new(&config.trojan, direct_acceptor)?;
-                    run_proxy(trojan_acceptor, direct_connector).await?;
+                    if config.mux.is_none() {
+                        run_proxy(trojan_acceptor, direct_connector).await?;
+                    } else {
+                        let mux_acceptor = MuxAcceptor::new(trojan_acceptor);
+                        run_proxy(mux_acceptor, direct_connector).await?;
+                    }
                 } else {
                     let ws_acceptor =
                         WebSocketAcceptor::new(&config.websocket.unwrap(), direct_acceptor)?;
                     let trojan_acceptor = TrojanAcceptor::new(&config.trojan, ws_acceptor)?;
-                    run_proxy(trojan_acceptor, direct_connector).await?;
+                    if config.mux.is_none() {
+                        run_proxy(trojan_acceptor, direct_connector).await?;
+                    } else {
+                        let mux_acceptor = MuxAcceptor::new(trojan_acceptor);
+                        run_proxy(mux_acceptor, direct_connector).await?;
+                    }
                 }
             } else {
                 let tls_acceptor = TrojanTlsAcceptor::new(&config.tls.unwrap()).await?;
                 if config.websocket.is_none() {
                     let trojan_acceptor = TrojanAcceptor::new(&config.trojan, tls_acceptor)?;
-                    run_proxy(trojan_acceptor, direct_connector).await?;
+                    if config.mux.is_none() {
+                        run_proxy(trojan_acceptor, direct_connector).await?;
+                    } else {
+                        let mux_acceptor = MuxAcceptor::new(trojan_acceptor);
+                        run_proxy(mux_acceptor, direct_connector).await?;
+                    }
                 } else {
                     let ws_acceptor =
                         WebSocketAcceptor::new(&config.websocket.unwrap(), tls_acceptor)?;
                     let trojan_acceptor = TrojanAcceptor::new(&config.trojan, ws_acceptor)?;
-                    run_proxy(trojan_acceptor, direct_connector).await?;
+                    if config.mux.is_none() {
+                        run_proxy(trojan_acceptor, direct_connector).await?;
+                    } else {
+                        let mux_acceptor = MuxAcceptor::new(trojan_acceptor);
+                        run_proxy(mux_acceptor, direct_connector).await?;
+                    }
                 }
             }
         }
@@ -238,12 +264,24 @@ pub async fn launch_from_config_string(config_string: String) -> io::Result<()> 
             let tls_connector = TrojanTlsConnector::new(&config.tls)?;
             if config.websocket.is_none() {
                 let trojan_connector = TrojanConnector::new(&config.trojan, tls_connector)?;
-                run_proxy(socks5_acceptor, trojan_connector).await?;
+                if config.mux.is_none() {
+                    run_proxy(socks5_acceptor, trojan_connector).await?;
+                } else {
+                    let mux_connector =
+                        MuxConnector::new(&config.mux.unwrap(), trojan_connector).unwrap();
+                    run_proxy(socks5_acceptor, mux_connector).await?;
+                }
             } else {
                 let ws_connector =
                     WebSocketConnector::new(&config.websocket.unwrap(), tls_connector)?;
                 let trojan_connector = TrojanConnector::new(&config.trojan, ws_connector)?;
-                run_proxy(socks5_acceptor, trojan_connector).await?;
+                if config.mux.is_none() {
+                    run_proxy(socks5_acceptor, trojan_connector).await?;
+                } else {
+                    let mux_connector =
+                        MuxConnector::new(&config.mux.unwrap(), trojan_connector).unwrap();
+                    run_proxy(socks5_acceptor, mux_connector).await?;
+                }
             }
         }
         #[cfg(feature = "forward")]

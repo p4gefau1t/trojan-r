@@ -61,7 +61,9 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + Sync> AsyncRead for BinaryWsStre
                         continue;
                     }
                 }
-                Message::Close(_) => return Poll::Ready(Ok(())),
+                Message::Close(_) => {
+                    return Poll::Ready(Err(io::ErrorKind::ConnectionAborted.into()));
+                }
                 _ => {
                     return Poll::Ready(Err(new_error(format!(
                         "invalid message type {:?}",

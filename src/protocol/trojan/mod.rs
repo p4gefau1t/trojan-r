@@ -71,20 +71,6 @@ impl<T: ProxyTcpStream> TrojanUdpStream<T> {
 }
 
 #[async_trait]
-impl<T: ProxyTcpStream> UdpRead for TrojanUdpStream<T> {
-    async fn read_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, Address)> {
-        self.reader.read_from(buf).await
-    }
-}
-
-#[async_trait]
-impl<T: ProxyTcpStream> UdpWrite for TrojanUdpStream<T> {
-    async fn write_to(&mut self, buf: &[u8], addr: &Address) -> io::Result<()> {
-        self.writer.write_to(buf, addr).await
-    }
-}
-
-#[async_trait]
 impl<T: ProxyTcpStream> ProxyUdpStream for TrojanUdpStream<T> {
     type R = TrojanUdpReader<ReadHalf<T>>;
     type W = TrojanUdpWriter<WriteHalf<T>>;

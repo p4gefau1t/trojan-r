@@ -14,6 +14,7 @@ use crate::error::Error;
 
 pub mod direct;
 pub mod dokodemo;
+pub mod mux;
 pub mod socks5;
 pub mod tls;
 pub mod trojan;
@@ -310,7 +311,7 @@ pub trait UdpWrite: Send + Sync + Unpin {
 }
 
 #[async_trait]
-pub trait ProxyUdpStream: UdpRead + UdpWrite + Send + Unpin {
+pub trait ProxyUdpStream: Send + Unpin {
     type R: UdpRead;
     type W: UdpWrite;
     fn split(self) -> (Self::R, Self::W);
