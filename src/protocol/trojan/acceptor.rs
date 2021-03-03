@@ -42,6 +42,7 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
                 }
             }
             Err(e) => {
+                log::debug!("first packet {:x?}", first_packet);
                 let fallback_addr = self.fallback_addr.clone();
                 log::warn!("fallback to {}", fallback_addr);
                 tokio::spawn(async move {

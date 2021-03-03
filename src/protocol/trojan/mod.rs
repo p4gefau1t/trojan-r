@@ -1,5 +1,6 @@
 use crate::error::Error;
 use async_trait::async_trait;
+use bytes::BufMut;
 use sha2::{Digest, Sha224};
 use std::{fmt::Write, io};
 use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
@@ -104,8 +105,6 @@ impl RequestHeader {
     where
         R: AsyncRead + Unpin,
     {
-        // TODO dirty code
-
         let mut hash_buf = [0u8; 56];
         let size = stream.read(&mut hash_buf).await?;
         if size != 56 {
@@ -143,14 +142,18 @@ impl RequestHeader {
     where
         W: AsyncWrite + Unpin,
     {
-        // TODO use write buffer
-        w.write(self.hash.as_bytes()).await?;
+        let header_len = 56 + 2 + 1 + self.address.serialized_len() + 2;
+        let mut buf = Vec::with_capacity(header_len);
+
+        let cursor = &mut buf;
         let crlf = b"\r\n";
-        w.write(crlf).await?;
-        let cmd = [self.command.as_u8()];
-        w.write(&cmd).await?;
-        self.address.write_to_stream(w).await?;
-        w.write(crlf).await?;
+        cursor.put_slice(self.hash.as_bytes());
+        cursor.put_slice(crlf);
+        cursor.put_u8(self.command.as_u8());
+        self.address.write_to_buf(cursor);
+        cursor.put_slice(crlf);
+
+        w.write(&buf).await?;
         Ok(())
     }
 }

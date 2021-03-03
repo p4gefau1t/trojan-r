@@ -50,7 +50,13 @@ impl MuxAcceptor {
         let (accept_stream_tx, accept_stream_rx) = channel(0x40);
         let handle: JoinHandle<io::Result<()>> = tokio::spawn(async move {
             loop {
-                let result = inner.accept().await?;
+                let result = match inner.accept().await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log::error!("mux accept err: {}", e);
+                        continue;
+                    }
+                };
                 match result {
                     AcceptResult::Tcp((stream, addr)) => {
                         let accept_stream_tx = accept_stream_tx.clone();

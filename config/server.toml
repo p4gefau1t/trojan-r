@@ -11,6 +11,13 @@ sni = "example.com"
 cert = "cert.pem"
 key = "key.pem"
 
-#optional
-#[websocket]
-#path = "/trojanpath"
+# optional
+# [plaintext]
+# addr = "127.0.0.1:12345"
+
+# optional
+# [websocket]
+# path = "/trojanpath"
+
+# optional
+# [mux]
