@@ -129,6 +129,7 @@ struct ForwardConfig {
     trojan: TrojanConnectorConfig,
     tls: TrojanTlsConnectorConfig,
     websocket: Option<WebSocketConnectorConfig>,
+    mux: Option<MuxConnectorConfig>,
 }
 
 async fn run_proxy<I: ProxyAcceptor, O: ProxyConnector + 'static>(
@@ -209,7 +210,7 @@ pub async fn launch_from_config_string(config_string: String) -> io::Result<()> 
             let direct_connector = DirectConnector {};
             if config.tls.is_none() {
                 if config.plaintext.is_none() {
-                    return Err(Error::new("direct/tls section not found").into());
+                    return Err(Error::new("plaintext/tls section not found").into());
                 }
                 let direct_acceptor = PlaintextAcceptor::new(&config.plaintext.unwrap()).await?;
                 if config.websocket.is_none() {
@@ -290,12 +291,24 @@ pub async fn launch_from_config_string(config_string: String) -> io::Result<()> 
             let tls_connector = TrojanTlsConnector::new(&config.tls)?;
             if config.websocket.is_none() {
                 let trojan_connector = TrojanConnector::new(&config.trojan, tls_connector)?;
-                run_proxy(dokodemo_acceptor, trojan_connector).await?;
+                if config.mux.is_none() {
+                    run_proxy(dokodemo_acceptor, trojan_connector).await?;
+                } else {
+                    let mux_connector =
+                        MuxConnector::new(&config.mux.unwrap(), trojan_connector).unwrap();
+                    run_proxy(dokodemo_acceptor, mux_connector).await?;
+                }
             } else {
                 let ws_connector =
                     WebSocketConnector::new(&config.websocket.unwrap(), tls_connector)?;
                 let trojan_connector = TrojanConnector::new(&config.trojan, ws_connector)?;
-                run_proxy(dokodemo_acceptor, trojan_connector).await?;
+                if config.mux.is_none() {
+                    run_proxy(dokodemo_acceptor, trojan_connector).await?;
+                } else {
+                    let mux_connector =
+                        MuxConnector::new(&config.mux.unwrap(), trojan_connector).unwrap();
+                    run_proxy(dokodemo_acceptor, mux_connector).await?;
+                }
             }
         }
         _ => {

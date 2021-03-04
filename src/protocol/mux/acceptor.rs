@@ -11,7 +11,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use super::{Command, MuxHandle, MuxStream, MuxUdpStream, RequestHeader};
+use super::{Command, MuxHandle, MuxStream, MuxUdpStream, RequestHeader, STREAM_CHANNEL_LEN};
 use crate::protocol::{AcceptResult, Address, ProxyAcceptor};
 
 #[derive(Deserialize)]
@@ -47,7 +47,7 @@ impl MuxAcceptor {
         inner: T,
         _config: &MuxAcceptorConfig,
     ) -> io::Result<Self> {
-        let (accept_stream_tx, accept_stream_rx) = channel(0x40);
+        let (accept_stream_tx, accept_stream_rx) = channel(STREAM_CHANNEL_LEN);
         let handle: JoinHandle<io::Result<()>> = tokio::spawn(async move {
             loop {
                 let result = match inner.accept().await {

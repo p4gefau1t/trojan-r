@@ -53,7 +53,7 @@ impl<T: ProxyConnector> MuxConnector<T> {
                         if num_streams == 0 || closed {
                             inactive_handle_id.push(*handle_id);
                         }
-                        log::debug!("{:x}: {:x}", *handle_id, num_streams);
+                        log::debug!("handle {:x}: {:x}", *handle_id, num_streams);
                     }
                     for handle_id in inactive_handle_id.iter() {
                         handlers.remove(handle_id);
