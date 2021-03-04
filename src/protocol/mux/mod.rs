@@ -141,10 +141,9 @@ impl UdpHeader {
         R: AsyncRead + Unpin,
     {
         let address = Address::read_from_stream(stream).await?;
-        log::debug!("udp addr read: {}", address);
-        let mut len = [0u8; 2];
-        stream.read_exact(&mut len).await?;
-        let len = ((len[0] as u16) << 8) | (len[1] as u16);
+        let mut len_buf = [0u8; 2];
+        stream.read_exact(&mut len_buf).await?;
+        let len = ((len_buf[0] as u16) << 8) | (len_buf[1] as u16);
         Ok(Self {
             address,
             payload_len: len,
@@ -156,7 +155,7 @@ impl UdpHeader {
         W: AsyncWrite + Unpin,
     {
         self.address.write_to_stream(w).await?;
-        self.payload_len.to_be_bytes();
+
         w.write(&self.payload_len.to_be_bytes()).await?;
         Ok(())
     }
@@ -445,6 +444,7 @@ impl UdpWrite for MuxStreamWriteHalf {
         let len = min(buf.len(), MAX_DATA_LEN);
         let udp_header = UdpHeader::new(addr, len);
         udp_header.write_to(self).await?;
+        self.write(buf).await?;
         Ok(())
     }
 }

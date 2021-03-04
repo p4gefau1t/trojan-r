@@ -106,9 +106,9 @@ impl RequestHeader {
         R: AsyncRead + Unpin,
     {
         let mut hash_buf = [0u8; 56];
-        let size = stream.read(&mut hash_buf).await?;
-        if size != 56 {
-            first_packet.extend_from_slice(&hash_buf[..size]);
+        let len = stream.read(&mut hash_buf).await?;
+        if len != 56 {
+            first_packet.extend_from_slice(&hash_buf[..len]);
             return Err(new_error("first packet too short"));
         }
 
@@ -200,7 +200,6 @@ impl TrojanUdpHeader {
         W: AsyncWrite + Unpin,
     {
         self.address.write_to_stream(w).await?;
-        self.payload_len.to_be_bytes();
         w.write(&self.payload_len.to_be_bytes()).await?;
         let crlf = b"\r\n";
         w.write(crlf).await?;

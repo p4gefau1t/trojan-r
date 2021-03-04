@@ -41,11 +41,12 @@ const RELAY_BUFFER_SIZE: usize = 0x4000;
 async fn copy_udp<R: UdpRead, W: UdpWrite>(r: &mut R, w: &mut W) -> io::Result<()> {
     let mut buf = [0u8; RELAY_BUFFER_SIZE];
     loop {
-        let (size, addr) = r.read_from(&mut buf).await?;
-        if size == 0 {
+        let (len, addr) = r.read_from(&mut buf).await?;
+        log::debug!("udp packet from {} len {}", addr, len);
+        if len == 0 {
             break;
         }
-        w.write_to(&buf[..size], &addr).await?;
+        w.write_to(&buf[..len], &addr).await?;
     }
     Ok(())
 }
@@ -56,11 +57,11 @@ async fn copy_tcp<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
 ) -> io::Result<()> {
     let mut buf = [0u8; RELAY_BUFFER_SIZE];
     loop {
-        let size = r.read(&mut buf).await?;
-        if size == 0 {
+        let len = r.read(&mut buf).await?;
+        if len == 0 {
             break;
         }
-        w.write(&buf[..size]).await?;
+        w.write(&buf[..len]).await?;
     }
     Ok(())
 }
@@ -77,8 +78,8 @@ pub async fn relay_udp<T: ProxyUdpStream, U: ProxyUdpStream>(a: T, b: U) {
     if let Err(e) = e {
         log::debug!("udp session ends: {}", e)
     }
-    let _ = T::reunite(a_rx, a_tx).close();
-    let _ = U::reunite(b_rx, b_tx).close();
+    let _ = T::reunite(a_rx, a_tx).close().await;
+    let _ = U::reunite(b_rx, b_tx).close().await;
 }
 
 pub async fn relay_tcp<T: ProxyTcpStream, U: ProxyTcpStream>(a: T, b: U) {

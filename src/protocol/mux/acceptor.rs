@@ -35,7 +35,7 @@ impl ProxyAcceptor for MuxAcceptor {
 
     async fn accept(&self) -> io::Result<AcceptResult<Self::TS, Self::US>> {
         if let Some(result) = self.accept_stream_rx.lock().await.recv().await {
-            return Ok(result);
+            Ok(result)
         } else {
             Err(io::ErrorKind::ConnectionReset.into())
         }

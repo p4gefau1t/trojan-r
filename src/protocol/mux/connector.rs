@@ -114,7 +114,7 @@ impl<T: ProxyConnector> ProxyConnector for MuxConnector<T> {
     async fn connect_udp(&self) -> io::Result<Self::US> {
         let mut stream = self.spawn_mux_stream().await?;
         RequestHeader::new(
-            Command::TcpConnect,
+            Command::UdpAssociate,
             &Address::DomainNameAddress("UDP_CONN".to_string(), 0),
         )
         .write_to(&mut stream)

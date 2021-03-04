@@ -62,8 +62,8 @@ pub struct DirectUdpStream {
 #[async_trait]
 impl UdpRead for DirectUdpStream {
     async fn read_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, Address)> {
-        let (size, addr) = self.inner.recv_from(buf).await?;
-        Ok((size, Address::SocketAddress(addr)))
+        let (len, addr) = self.inner.recv_from(buf).await?;
+        Ok((len, Address::SocketAddress(addr)))
     }
 }
 

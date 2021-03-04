@@ -26,8 +26,8 @@ pub struct DokodemoUdpStream {
 #[async_trait]
 impl UdpRead for DokodemoUdpStream {
     async fn read_from(&mut self, buf: &mut [u8]) -> Result<(usize, Address)> {
-        let (size, _) = self.inner.recv_from(buf).await?;
-        Ok((size, self.addr.clone()))
+        let (len, _) = self.inner.recv_from(buf).await?;
+        Ok((len, self.addr.clone()))
     }
 }
 
