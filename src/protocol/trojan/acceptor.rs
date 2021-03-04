@@ -44,7 +44,7 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
             Err(e) => {
                 log::debug!("first packet {:x?}", first_packet);
                 let fallback_addr = self.fallback_addr.clone();
-                log::warn!("fallback to {}", fallback_addr);
+                log::warn!("falling back to {}", fallback_addr);
                 tokio::spawn(async move {
                     let inbound = stream;
                     let mut outbound = TcpStream::connect(fallback_addr.to_string()).await.unwrap();

@@ -68,7 +68,7 @@ impl ProxyConnector for TrojanTlsConnector {
             .connect(dns_name, stream)
             .await?;
 
-        log::info!("tls: connected to {}", self.server_addr);
+        log::info!("connected to {}", self.server_addr);
         Ok(stream)
     }
 

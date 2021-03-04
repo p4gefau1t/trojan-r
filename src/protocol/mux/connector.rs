@@ -25,20 +25,26 @@ pub struct MuxConnector<T: ProxyConnector> {
     handlers: Arc<Mutex<HashMap<u32, MuxHandle>>>,
     concurrent: usize,
     inner: T,
-    cleaner: JoinHandle<()>,
+    cleaner_handle: JoinHandle<()>,
     handle_id_hint: Arc<AtomicU32>,
 }
 
 impl<T: ProxyConnector> Drop for MuxConnector<T> {
     fn drop(&mut self) {
-        self.cleaner.abort();
+        self.cleaner_handle.abort();
     }
 }
 
 impl<T: ProxyConnector> MuxConnector<T> {
     pub fn new(config: &MuxConnectorConfig, inner: T) -> io::Result<Self> {
         let handlers: Arc<Mutex<HashMap<u32, MuxHandle>>> = Arc::new(Mutex::new(HashMap::new()));
-        let cleaner = {
+        if config.concurrent < 2 || config.timeout == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid parameters for mux",
+            ));
+        }
+        let cleaner_handle = {
             let timeout = Duration::from_secs(config.timeout as u64);
             let handlers = handlers.clone();
             tokio::spawn(async move {
@@ -64,7 +70,7 @@ impl<T: ProxyConnector> MuxConnector<T> {
         Ok(Self {
             concurrent: config.concurrent,
             handlers,
-            cleaner,
+            cleaner_handle,
             inner,
             handle_id_hint: Arc::new(AtomicU32::new(0)),
         })
