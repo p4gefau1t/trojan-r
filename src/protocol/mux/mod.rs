@@ -28,7 +28,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use super::{Address, ProxyTcpStream, ProxyUdpStream, UdpRead, UdpWrite};
+use super::{trojan::UdpHeader, Address, ProxyTcpStream, ProxyUdpStream, UdpRead, UdpWrite};
 use crate::error::Error;
 
 pub mod acceptor;
@@ -54,109 +54,42 @@ const STREAM_CHANNEL_LEN: usize = 0x20;
 const CMD_TCP_CONNECT: u8 = 0x01;
 const CMD_UDP_ASSOCIATE: u8 = 0x03;
 
-#[derive(Clone, Debug, Copy, Eq, PartialEq)]
-pub enum Command {
-    /// CONNECT command (TCP tunnel)
-    TcpConnect,
-    /// UDP ASSOCIATE command
+enum RequestHeader {
+    TcpConnect(Address),
     UdpAssociate,
 }
 
-impl Command {
-    #[inline]
-    fn as_u8(self) -> u8 {
-        match self {
-            Command::TcpConnect => CMD_TCP_CONNECT,
-            Command::UdpAssociate => CMD_UDP_ASSOCIATE,
-        }
-    }
-
-    #[inline]
-    fn from_u8(code: u8) -> io::Result<Command> {
-        match code {
-            CMD_TCP_CONNECT => Ok(Command::TcpConnect),
-            CMD_UDP_ASSOCIATE => Ok(Command::UdpAssociate),
-            _ => Err(new_error(format!("invalid request command: {}", code))),
-        }
-    }
-}
-
-struct RequestHeader {
-    command: Command,
-    address: Address,
-}
-
 impl RequestHeader {
-    pub fn new(command: Command, address: &Address) -> Self {
-        Self {
-            command,
-            address: address.clone(),
-        }
-    }
-
     pub async fn read_from<R>(stream: &mut R) -> io::Result<Self>
     where
         R: AsyncRead + Unpin,
     {
         let mut cmd = [0u8; 1];
         stream.read_exact(&mut cmd).await?;
-        let command = Command::from_u8(cmd[0])?;
-        let address = Address::read_from_stream(stream).await?;
-        Ok(Self { command, address })
-    }
-
-    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
-    where
-        W: AsyncWrite + Unpin,
-    {
-        let cmd = [self.command.as_u8()];
-        w.write(&cmd).await?;
-        self.address.write_to_stream(w).await?;
-        Ok(())
-    }
-}
-
-/// ```plain
-/// +------+----------+----------+--------+---------+----------+
-/// | ATYP | DST.ADDR | DST.PORT | Length |  CRLF   | Payload  |
-/// +------+----------+----------+--------+---------+----------+
-/// |  1   | Variable |    2     |   2    | X'0D0A' | Variable |
-/// +------+----------+----------+--------+---------+----------+
-/// ```
-struct UdpHeader {
-    pub address: Address,
-    pub payload_len: u16,
-}
-
-impl UdpHeader {
-    pub fn new(address: &Address, payload_len: usize) -> Self {
-        Self {
-            address: address.clone(),
-            payload_len: payload_len as u16,
+        let addr = Address::read_from_stream(stream).await?;
+        match cmd[0] {
+            CMD_TCP_CONNECT => Ok(Self::TcpConnect(addr)),
+            CMD_UDP_ASSOCIATE => Ok(Self::UdpAssociate),
+            _ => Err(new_error("invalid cmd")),
         }
     }
 
-    pub async fn read_from<R>(stream: &mut R) -> io::Result<Self>
-    where
-        R: AsyncRead + Unpin,
-    {
-        let address = Address::read_from_stream(stream).await?;
-        let mut len_buf = [0u8; 2];
-        stream.read_exact(&mut len_buf).await?;
-        let len = ((len_buf[0] as u16) << 8) | (len_buf[1] as u16);
-        Ok(Self {
-            address,
-            payload_len: len,
-        })
-    }
-
     pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
-        self.address.write_to_stream(w).await?;
+        let dummy_addr = Address::new_dummy_address();
+        let (cmd, addr) = match self {
+            RequestHeader::TcpConnect(addr) => (CMD_TCP_CONNECT, addr),
+            RequestHeader::UdpAssociate => (CMD_UDP_ASSOCIATE, &dummy_addr),
+        };
+        let mut buf = Vec::with_capacity(1 + addr.serialized_len());
+        let cursor = &mut buf;
 
-        w.write(&self.payload_len.to_be_bytes()).await?;
+        cursor.put_u8(cmd);
+        addr.write_to_buf(cursor);
+
+        w.write(&buf).await?;
         Ok(())
     }
 }

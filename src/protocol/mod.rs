@@ -1,14 +1,14 @@
 use async_trait::async_trait;
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut};
 use fmt::Debug;
 use std::{
     fmt::{self, Formatter},
     io::{self, Cursor},
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     str::FromStr,
     vec,
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 
 use crate::error::Error;
 
@@ -77,9 +77,14 @@ impl FromStr for Address {
     }
 }
 impl Address {
-    pub const ADDR_TYPE_IPV4: u8 = 1;
-    pub const ADDR_TYPE_DOMAIN_NAME: u8 = 3;
-    pub const ADDR_TYPE_IPV6: u8 = 4;
+    const ADDR_TYPE_IPV4: u8 = 1;
+    const ADDR_TYPE_DOMAIN_NAME: u8 = 3;
+    const ADDR_TYPE_IPV6: u8 = 4;
+
+    #[inline]
+    fn new_dummy_address() -> Address {
+        Address::SocketAddress(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0))
+    }
 
     #[inline]
     fn serialized_len(&self) -> usize {
@@ -90,7 +95,7 @@ impl Address {
         }
     }
 
-    pub async fn read_from_stream<R>(stream: &mut R) -> Result<Address, Error>
+    async fn read_from_stream<R>(stream: &mut R) -> Result<Address, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -165,7 +170,7 @@ impl Address {
         }
     }
 
-    pub fn read_from_buf(buf: &[u8]) -> io::Result<Self> {
+    fn read_from_buf(buf: &[u8]) -> io::Result<Self> {
         let mut cur = Cursor::new(buf);
         if cur.remaining() < 1 + 1 {
             return Err(new_error("invalid address buffer"));
@@ -218,18 +223,7 @@ impl Address {
         }
     }
 
-    #[inline]
-    pub async fn write_to_stream<W>(&self, writer: &mut W) -> io::Result<()>
-    where
-        W: AsyncWrite + Unpin,
-    {
-        let mut buf = BytesMut::with_capacity(self.serialized_len());
-        self.write_to_buf(&mut buf);
-        writer.write(&buf).await?;
-        Ok(())
-    }
-
-    pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+    fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         match self {
             Self::SocketAddress(SocketAddr::V4(addr)) => {
                 buf.put_u8(Self::ADDR_TYPE_IPV4);

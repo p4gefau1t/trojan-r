@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 
-use super::{new_key, Command, MuxHandle, MuxStream, MuxUdpStream, RequestHeader};
+use super::{new_key, MuxHandle, MuxStream, MuxUdpStream, RequestHeader};
 use crate::protocol::{Address, ProxyConnector};
 
 #[derive(Deserialize)]
@@ -47,6 +47,7 @@ impl<T: ProxyConnector> MuxConnector<T> {
         let cleaner_handle = {
             let timeout = Duration::from_secs(config.timeout as u64);
             let handlers = handlers.clone();
+            let concurrent = config.concurrent;
             tokio::spawn(async move {
                 loop {
                     sleep(timeout).await;
@@ -59,7 +60,12 @@ impl<T: ProxyConnector> MuxConnector<T> {
                         if num_streams == 0 || closed {
                             inactive_handle_id.push(*handle_id);
                         }
-                        log::debug!("handle {:x}: {:x}", *handle_id, num_streams);
+                        log::debug!(
+                            "mux handle {:x}: {}/{}",
+                            *handle_id,
+                            num_streams,
+                            concurrent
+                        );
                     }
                     for handle_id in inactive_handle_id.iter() {
                         handlers.remove(handle_id);
@@ -111,20 +117,15 @@ impl<T: ProxyConnector> ProxyConnector for MuxConnector<T> {
 
     async fn connect_tcp(&self, addr: &Address) -> io::Result<Self::TS> {
         let mut stream = self.spawn_mux_stream().await?;
-        RequestHeader::new(Command::TcpConnect, addr)
-            .write_to(&mut stream)
-            .await?;
+        let header = RequestHeader::TcpConnect(addr.clone());
+        header.write_to(&mut stream).await?;
         return Ok(stream);
     }
 
     async fn connect_udp(&self) -> io::Result<Self::US> {
         let mut stream = self.spawn_mux_stream().await?;
-        RequestHeader::new(
-            Command::UdpAssociate,
-            &Address::DomainNameAddress("UDP_CONN".to_string(), 0),
-        )
-        .write_to(&mut stream)
-        .await?;
+        let header = RequestHeader::UdpAssociate;
+        header.write_to(&mut stream).await?;
         Ok(MuxUdpStream { inner: stream })
     }
 }

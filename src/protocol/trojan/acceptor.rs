@@ -1,15 +1,13 @@
 use async_trait::async_trait;
+use bytes::Buf;
 use serde::Deserialize;
 use std::{io, str::FromStr};
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
-use crate::protocol::{
-    trojan::{Command, RequestHeader},
-    AcceptResult, Address, ProxyAcceptor,
-};
+use crate::protocol::{trojan::RequestHeader, AcceptResult, Address, ProxyAcceptor};
 use crate::proxy::relay_tcp;
 
-use super::{new_error, password_to_hash, TrojanUdpStream};
+use super::{new_error, password_to_hash, TrojanUdpStream, HASH_STR_LEN};
 
 #[derive(Deserialize)]
 pub struct TrojanAcceptorConfig {
@@ -18,7 +16,7 @@ pub struct TrojanAcceptorConfig {
 }
 
 pub struct TrojanAcceptor<T: ProxyAcceptor> {
-    valid_hash: String,
+    valid_hash: [u8; HASH_STR_LEN],
     fallback_addr: Address,
     inner: T,
 }
@@ -31,20 +29,20 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
         let (mut stream, addr) = self.inner.accept().await?.unwrap_tcp_with_addr();
         let mut first_packet = Vec::new();
         match RequestHeader::read_from(&mut stream, &self.valid_hash, &mut first_packet).await {
-            Ok(header) => {
-                log::info!("trojan connection from {}, user = {}", addr, header.hash);
-                match header.command {
-                    Command::TcpConnect => Ok(AcceptResult::Tcp((stream, header.address))),
-                    Command::UdpAssociate => {
-                        log::debug!("udp associate");
-                        Ok(AcceptResult::Udp(TrojanUdpStream::new(stream)))
-                    }
+            Ok(header) => match header {
+                RequestHeader::TcpConnect(_, addr) => {
+                    log::info!("trojan tcp stream from {}", addr);
+                    Ok(AcceptResult::Tcp((stream, addr)))
                 }
-            }
+                RequestHeader::UdpAssociate(_) => {
+                    log::info!("trojan udp stream from {}", addr);
+                    Ok(AcceptResult::Udp(TrojanUdpStream::new(stream)))
+                }
+            },
             Err(e) => {
                 log::debug!("first packet {:x?}", first_packet);
                 let fallback_addr = self.fallback_addr.clone();
-                log::warn!("falling back to {}", fallback_addr);
+                log::warn!("invalid trojan request, falling back to {}", fallback_addr);
                 tokio::spawn(async move {
                     let inbound = stream;
                     let mut outbound = TcpStream::connect(fallback_addr.to_string()).await.unwrap();
@@ -59,8 +57,11 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
 
 impl<T: ProxyAcceptor> TrojanAcceptor<T> {
     pub fn new(config: &TrojanAcceptorConfig, inner: T) -> io::Result<Self> {
-        let valid_hash = password_to_hash(&config.password);
         let fallback_addr = Address::from_str(&config.fallback_addr)?;
+        let mut valid_hash = [0u8; HASH_STR_LEN];
+        password_to_hash(&config.password)
+            .as_bytes()
+            .copy_to_slice(&mut valid_hash);
         Ok(Self {
             fallback_addr,
             valid_hash,

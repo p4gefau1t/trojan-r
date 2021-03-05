@@ -1,10 +1,11 @@
 use async_trait::async_trait;
+use bytes::Buf;
 use serde::Deserialize;
 use std::io;
 
 use crate::protocol::{Address, ProxyConnector};
 
-use super::{new_error, password_to_hash, Command, RequestHeader, TrojanUdpStream};
+use super::{new_error, password_to_hash, RequestHeader, TrojanUdpStream, HASH_STR_LEN};
 
 #[derive(Deserialize)]
 pub struct TrojanConnectorConfig {
@@ -13,7 +14,7 @@ pub struct TrojanConnectorConfig {
 
 pub struct TrojanConnector<T: ProxyConnector> {
     inner: T,
-    hash: String,
+    hash: [u8; HASH_STR_LEN],
 }
 
 impl<T: ProxyConnector> TrojanConnector<T> {
@@ -21,7 +22,10 @@ impl<T: ProxyConnector> TrojanConnector<T> {
         if config.password.len() < 1 {
             return Err(new_error("no valid password found"));
         }
-        let hash = password_to_hash(&config.password);
+        let mut hash = [0u8; HASH_STR_LEN];
+        password_to_hash(&config.password)
+            .as_bytes()
+            .copy_to_slice(&mut hash);
         Ok(Self { inner, hash })
     }
 }
@@ -33,15 +37,15 @@ impl<T: ProxyConnector> ProxyConnector for TrojanConnector<T> {
 
     async fn connect_tcp(&self, addr: &Address) -> io::Result<Self::TS> {
         let mut stream = self.inner.connect_tcp(addr).await?;
-        let header = RequestHeader::new(&self.hash, Command::TcpConnect, addr);
+        let header = RequestHeader::TcpConnect(self.hash.clone(), addr.clone());
         header.write_to(&mut stream).await?;
         Ok(stream)
     }
 
     async fn connect_udp(&self) -> io::Result<Self::US> {
-        let dummy_addr = Address::DomainNameAddress(String::from("UDP_CONN"), 0);
-        let mut stream = self.inner.connect_tcp(&dummy_addr).await?;
-        let header = RequestHeader::new(&self.hash, Command::UdpAssociate, &dummy_addr);
+        let udp_dummy_addr = Address::new_dummy_address();
+        let mut stream = self.inner.connect_tcp(&udp_dummy_addr).await?;
+        let header = RequestHeader::UdpAssociate(self.hash.clone());
         header.write_to(&mut stream).await?;
         Ok(TrojanUdpStream::new(stream))
     }

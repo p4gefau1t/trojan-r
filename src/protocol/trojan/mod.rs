@@ -10,6 +10,8 @@ use super::{Address, ProxyTcpStream, ProxyUdpStream, UdpRead, UdpWrite};
 pub mod acceptor;
 pub mod connector;
 
+const HASH_STR_LEN: usize = 56;
+
 fn new_error<T: ToString>(message: T) -> io::Error {
     return Error::new(format!("trojan: {}", message.to_string())).into();
 }
@@ -18,7 +20,7 @@ fn password_to_hash<T: ToString>(s: T) -> String {
     let mut hasher = Sha224::new();
     hasher.update(&s.to_string().into_bytes());
     let h = hasher.finalize();
-    let mut s = String::with_capacity(56);
+    let mut s = String::with_capacity(HASH_STR_LEN);
     for i in h {
         write!(s, "{:02x}", i).unwrap();
     }
@@ -27,33 +29,6 @@ fn password_to_hash<T: ToString>(s: T) -> String {
 
 const CMD_TCP_CONNECT: u8 = 0x01;
 const CMD_UDP_ASSOCIATE: u8 = 0x03;
-
-#[derive(Clone, Debug, Copy, Eq, PartialEq)]
-pub enum Command {
-    /// CONNECT command (TCP tunnel)
-    TcpConnect,
-    /// UDP ASSOCIATE command
-    UdpAssociate,
-}
-
-impl Command {
-    #[inline]
-    fn as_u8(self) -> u8 {
-        match self {
-            Command::TcpConnect => CMD_TCP_CONNECT,
-            Command::UdpAssociate => CMD_UDP_ASSOCIATE,
-        }
-    }
-
-    #[inline]
-    fn from_u8(code: u8) -> io::Result<Command> {
-        match code {
-            CMD_TCP_CONNECT => Ok(Command::TcpConnect),
-            CMD_UDP_ASSOCIATE => Ok(Command::UdpAssociate),
-            _ => Err(new_error(format!("invalid request command: {}", code))),
-        }
-    }
-}
 
 /// ```plain
 /// +-----------------------+---------+----------------+---------+----------+
@@ -82,75 +57,69 @@ impl Command {
 /// o  DST.ADDR desired destination address
 /// o  DST.PORT desired destination port in network octet order
 /// ```
-struct RequestHeader {
-    hash: String,
-    command: Command,
-    address: Address,
+enum RequestHeader {
+    TcpConnect([u8; HASH_STR_LEN], Address),
+    UdpAssociate([u8; HASH_STR_LEN]),
 }
 
 impl RequestHeader {
-    pub fn new(hash: &String, command: Command, address: &Address) -> Self {
-        Self {
-            hash: hash.clone(),
-            command,
-            address: address.clone(),
-        }
-    }
-
-    pub async fn read_from<R>(
+    async fn read_from<R>(
         stream: &mut R,
-        valid_hash: &String,
+        valid_hash: &[u8],
         first_packet: &mut Vec<u8>,
     ) -> io::Result<Self>
     where
         R: AsyncRead + Unpin,
     {
-        let mut hash_buf = [0u8; 56];
+        let mut hash_buf = [0u8; HASH_STR_LEN];
         let len = stream.read(&mut hash_buf).await?;
-        if len != 56 {
+        if len != HASH_STR_LEN {
             first_packet.extend_from_slice(&hash_buf[..len]);
             return Err(new_error("first packet too short"));
         }
 
-        let hash = String::from_utf8(hash_buf[..].to_vec()).map_err(|e| {
-            first_packet.extend_from_slice(&hash_buf[..]);
-            new_error(format!("failed to convert hash to utf8 {}", e.to_string()))
-        })?;
-
-        if !(valid_hash == &hash) {
-            first_packet.extend_from_slice(&hash_buf[..]);
-            return Err(new_error(format!("invalid password hash: {}", hash)));
+        if valid_hash != hash_buf {
+            first_packet.extend_from_slice(&hash_buf);
+            return Err(new_error(format!(
+                "invalid password hash: {}",
+                String::from_utf8_lossy(&hash_buf)
+            )));
         }
 
-        let mut crlf = [0u8; 2];
-        stream.read_exact(&mut crlf).await?;
+        let mut crlf_buf = [0u8; 2];
+        let mut cmd_buf = [0u8; 1];
 
-        let mut cmd = [0u8; 1];
-        stream.read_exact(&mut cmd).await?;
-        let command = Command::from_u8(cmd[0])?;
-        let address = Address::read_from_stream(stream).await?;
+        stream.read_exact(&mut crlf_buf).await?;
+        stream.read_exact(&mut cmd_buf).await?;
+        let addr = Address::read_from_stream(stream).await?;
+        stream.read_exact(&mut crlf_buf).await?;
 
-        stream.read_exact(&mut crlf).await?;
-        Ok(Self {
-            hash,
-            command,
-            address,
-        })
+        match cmd_buf[0] {
+            CMD_TCP_CONNECT => Ok(Self::TcpConnect(hash_buf, addr)),
+            CMD_UDP_ASSOCIATE => Ok(Self::UdpAssociate(hash_buf)),
+            _ => Err(new_error("invalid command")),
+        }
     }
 
-    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
-        let header_len = 56 + 2 + 1 + self.address.serialized_len() + 2;
+        let udp_dummy_addr = Address::new_dummy_address();
+        let (hash, addr, cmd) = match self {
+            RequestHeader::TcpConnect(hash, addr) => (hash, addr, CMD_TCP_CONNECT),
+            RequestHeader::UdpAssociate(hash) => (hash, &udp_dummy_addr, CMD_UDP_ASSOCIATE),
+        };
+
+        let header_len = HASH_STR_LEN + 2 + 1 + addr.serialized_len() + 2;
         let mut buf = Vec::with_capacity(header_len);
 
         let cursor = &mut buf;
         let crlf = b"\r\n";
-        cursor.put_slice(self.hash.as_bytes());
+        cursor.put_slice(hash);
         cursor.put_slice(crlf);
-        cursor.put_u8(self.command.as_u8());
-        self.address.write_to_buf(cursor);
+        cursor.put_u8(cmd);
+        addr.write_to_buf(cursor);
         cursor.put_slice(crlf);
 
         w.write(&buf).await?;
@@ -165,15 +134,15 @@ impl RequestHeader {
 /// |  1   | Variable |    2     |   2    | X'0D0A' | Variable |
 /// +------+----------+----------+--------+---------+----------+
 /// ```
-pub struct TrojanUdpHeader {
+pub struct UdpHeader {
     pub address: Address,
     pub payload_len: u16,
 }
 
-impl TrojanUdpHeader {
-    pub fn new(address: &Address, payload_len: usize) -> Self {
+impl UdpHeader {
+    pub fn new(addr: &Address, payload_len: usize) -> Self {
         Self {
-            address: address.clone(),
+            address: addr.clone(),
             payload_len: payload_len as u16,
         }
     }
@@ -184,11 +153,10 @@ impl TrojanUdpHeader {
     {
         let address = Address::read_from_stream(stream).await?;
         log::debug!("udp addr read: {}", address);
-        let mut len = [0u8; 2];
-        stream.read_exact(&mut len).await?;
-        let len = ((len[0] as u16) << 8) | (len[1] as u16);
-        let mut crlf = [0u8; 2];
-        stream.read_exact(&mut crlf).await?;
+        let mut buf = [0u8; 2];
+        stream.read_exact(&mut buf).await?;
+        let len = ((buf[0] as u16) << 8) | (buf[1] as u16);
+        stream.read_exact(&mut buf).await?;
         Ok(Self {
             address,
             payload_len: len,
@@ -199,10 +167,13 @@ impl TrojanUdpHeader {
     where
         W: AsyncWrite + Unpin,
     {
-        self.address.write_to_stream(w).await?;
-        w.write(&self.payload_len.to_be_bytes()).await?;
-        let crlf = b"\r\n";
-        w.write(crlf).await?;
+        let mut buf = Vec::with_capacity(self.address.serialized_len() + 2 + 1);
+        self.address.write_to_buf(&mut buf);
+        let cursor = &mut buf;
+        self.address.write_to_buf(cursor);
+        cursor.put_u16(self.payload_len);
+        cursor.put_slice(b"\r\n");
+        w.write(&buf).await?;
         Ok(())
     }
 }
@@ -214,7 +185,7 @@ pub struct TrojanUdpReader<T> {
 #[async_trait]
 impl<T: AsyncRead + Unpin + Send + Sync> UdpRead for TrojanUdpReader<T> {
     async fn read_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, Address)> {
-        let header = TrojanUdpHeader::read_from(&mut self.inner).await?;
+        let header = UdpHeader::read_from(&mut self.inner).await?;
         self.inner
             .read_exact(&mut buf[..header.payload_len as usize])
             .await?;
@@ -229,7 +200,7 @@ pub struct TrojanUdpWriter<T> {
 #[async_trait]
 impl<T: AsyncWrite + Unpin + Send + Sync> UdpWrite for TrojanUdpWriter<T> {
     async fn write_to(&mut self, buf: &[u8], addr: &Address) -> io::Result<()> {
-        let header = TrojanUdpHeader::new(addr, buf.len());
+        let header = UdpHeader::new(addr, buf.len());
         header.write_to(&mut self.inner).await?;
         self.inner.write(buf).await?;
         Ok(())

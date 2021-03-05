@@ -61,7 +61,7 @@ struct TcpRequestHeader {
 
 impl TcpRequestHeader {
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> io::Result<TcpRequestHeader>
+    async fn read_from<R>(r: &mut R) -> io::Result<TcpRequestHeader>
     where
         R: AsyncRead + Unpin,
     {
@@ -96,19 +96,19 @@ impl TcpRequestHeader {
 /// +----+-----+-------+------+----------+----------+
 /// ```
 #[derive(Clone, Debug)]
-pub struct TcpResponseHeader {
+struct TcpResponseHeader {
     /// Reply address
-    pub address: Address,
+    address: Address,
 }
 
 impl TcpResponseHeader {
     /// Creates a response header
-    pub fn new(address: Address) -> TcpResponseHeader {
+    fn new(address: Address) -> TcpResponseHeader {
         TcpResponseHeader { address }
     }
 
     /// Write to a writer
-    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
@@ -119,7 +119,7 @@ impl TcpResponseHeader {
     }
 
     /// Writes to buffer
-    pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+    fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         let TcpResponseHeader { ref address } = *self;
         buf.put_slice(&[VERSION, REPLY_SUCCEEDED, 0x00]);
         address.write_to_buf(buf);
@@ -127,7 +127,7 @@ impl TcpResponseHeader {
 
     /// Length in bytes
     #[inline]
-    pub fn serialized_len(&self) -> usize {
+    fn serialized_len(&self) -> usize {
         self.address.serialized_len() + 3
     }
 }
@@ -142,13 +142,13 @@ impl TcpResponseHeader {
 /// +----+----------+----------|
 /// ```
 #[derive(Clone, Debug)]
-pub struct HandshakeRequest {
-    pub methods: Vec<u8>,
+struct HandshakeRequest {
+    methods: Vec<u8>,
 }
 
 impl HandshakeRequest {
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> io::Result<HandshakeRequest>
+    async fn read_from<R>(r: &mut R) -> io::Result<HandshakeRequest>
     where
         R: AsyncRead + Unpin,
     {
@@ -184,18 +184,18 @@ impl HandshakeRequest {
 /// +----+--------+
 /// ```
 #[derive(Clone, Debug, Copy)]
-pub struct HandshakeResponse {
-    pub chosen_method: u8,
+struct HandshakeResponse {
+    chosen_method: u8,
 }
 
 impl HandshakeResponse {
     /// Creates a handshake response
-    pub fn new(cm: u8) -> HandshakeResponse {
+    fn new(cm: u8) -> HandshakeResponse {
         HandshakeResponse { chosen_method: cm }
     }
 
     /// Write to a writer
-    pub async fn write_to<W>(self, w: &mut W) -> io::Result<()>
+    async fn write_to<W>(self, w: &mut W) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
@@ -205,12 +205,12 @@ impl HandshakeResponse {
     }
 
     /// Write to buffer
-    pub fn write_to_buf<B: BufMut>(self, buf: &mut B) {
+    fn write_to_buf<B: BufMut>(self, buf: &mut B) {
         buf.put_slice(&[VERSION, self.chosen_method]);
     }
 
     /// Length in bytes
-    pub fn serialized_len(self) -> usize {
+    fn serialized_len(self) -> usize {
         2
     }
 }
@@ -225,20 +225,20 @@ impl HandshakeResponse {
 /// +----+------+------+----------+----------+----------+
 /// ```
 #[derive(Clone, Debug)]
-pub struct UdpAssociateHeader {
+struct UdpAssociateHeader {
     /// Fragment
-    pub frag: u8,
+    frag: u8,
     /// Remote address
-    pub address: Address,
+    address: Address,
 }
 
 impl UdpAssociateHeader {
     /// Creates a header
-    pub fn new(frag: u8, address: Address) -> UdpAssociateHeader {
+    fn new(frag: u8, address: Address) -> UdpAssociateHeader {
         UdpAssociateHeader { frag, address }
     }
 
-    pub fn read_from_buf(buf: &[u8]) -> io::Result<UdpAssociateHeader> {
+    fn read_from_buf(buf: &[u8]) -> io::Result<UdpAssociateHeader> {
         if buf.len() <= 3 {
             return Err(new_error("packet too short"));
         }
@@ -246,14 +246,14 @@ impl UdpAssociateHeader {
         Ok(UdpAssociateHeader::new(0, addr))
     }
 
-    pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+    fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         buf.put_slice(&[0x00, 0x00, 0x00]);
         self.address.write_to_buf(buf);
     }
 
     /// Length in bytes
     #[inline]
-    pub fn serialized_len(&self) -> usize {
+    fn serialized_len(&self) -> usize {
         3 + self.address.serialized_len()
     }
 }
