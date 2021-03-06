@@ -31,11 +31,11 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
         match RequestHeader::read_from(&mut stream, &self.valid_hash, &mut first_packet).await {
             Ok(header) => match header {
                 RequestHeader::TcpConnect(_, addr) => {
-                    log::info!("trojan tcp stream from {}", addr);
+                    log::info!("trojan tcp stream {}", addr);
                     Ok(AcceptResult::Tcp((stream, addr)))
                 }
                 RequestHeader::UdpAssociate(_) => {
-                    log::info!("trojan udp stream from {}", addr);
+                    log::info!("trojan udp stream {}", addr);
                     Ok(AcceptResult::Udp(TrojanUdpStream::new(stream)))
                 }
             },

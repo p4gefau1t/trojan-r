@@ -76,10 +76,11 @@ pub async fn relay_udp<T: ProxyUdpStream, U: ProxyUdpStream>(a: T, b: U) {
         e = t2 => {e}
     };
     if let Err(e) = e {
-        log::debug!("udp session ends: {}", e)
+        log::debug!("udp_relay err: {}", e)
     }
     let _ = T::reunite(a_rx, a_tx).close().await;
     let _ = U::reunite(b_rx, b_tx).close().await;
+    log::info!("udp session ends");
 }
 
 pub async fn relay_tcp<T: ProxyTcpStream, U: ProxyTcpStream>(a: T, b: U) {
@@ -92,12 +93,13 @@ pub async fn relay_tcp<T: ProxyTcpStream, U: ProxyTcpStream>(a: T, b: U) {
         e = t2 => {e}
     };
     if let Err(e) = e {
-        log::debug!("tcp session ends: {}", e)
+        log::debug!("relay_tcp err: {}", e)
     }
     let mut a = a_rx.unsplit(a_tx);
     let mut b = b_rx.unsplit(b_tx);
     let _ = a.shutdown().await;
     let _ = b.shutdown().await;
+    log::info!("tcp session ends");
 }
 
 #[derive(Deserialize)]
@@ -145,14 +147,11 @@ async fn run_proxy<I: ProxyAcceptor, O: ProxyConnector + 'static>(
                 tokio::spawn(async move {
                     match connector.connect_tcp(&addr).await {
                         Ok(outbound) => {
+                            log::info!("relaying tcp stream to {}", addr);
                             relay_tcp(inbound, outbound).await;
                         }
                         Err(e) => {
-                            log::error!(
-                                "failed to relay tcp connection to {}: {}",
-                                addr.to_string(),
-                                e.to_string()
-                            );
+                            log::error!("failed to relay tcp stream to {}: {}", addr, e);
                         }
                     }
                 });
@@ -162,10 +161,11 @@ async fn run_proxy<I: ProxyAcceptor, O: ProxyConnector + 'static>(
                 tokio::spawn(async move {
                     match connector.connect_udp().await {
                         Ok(outbound) => {
+                            log::info!("relaying udp stream..");
                             relay_udp(inbound, outbound).await;
                         }
                         Err(e) => {
-                            log::error!("failed to relay tcp connection: {}", e.to_string());
+                            log::error!("failed to relay tcp stream: {}", e.to_string());
                         }
                     }
                 });

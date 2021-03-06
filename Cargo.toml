@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 bytes = "1.0"
-tokio = {version = "1.2", features = ["rt", "net", "io-util", "rt-multi-thread", "sync", "macros", "time"]}
+tokio = {version = "1.2", features = ["rt", "net", "io-util", "rt-multi-thread", "sync", "macros"]}
 tokio-rustls = "0.22"
 log = "0.4"
 async-trait = "0.1"
@@ -17,7 +17,7 @@ toml = "0.5"
 clap = "2.33"
 webpki = "0.21"
 webpki-roots = "0.21"
-tokio-tungstenite = "0.13"
+tokio-tungstenite = "0.14"
 futures-core = "0.3"
 futures-util = "0.3"
 

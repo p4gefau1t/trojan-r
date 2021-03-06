@@ -125,7 +125,7 @@ impl ProxyAcceptor for Socks5Acceptor {
 
     async fn accept(&self) -> io::Result<AcceptResult<Self::TS, Self::US>> {
         let (mut stream, addr) = self.tcp_listener.accept().await?;
-        log::info!("socks5 connection from addr {}", addr);
+        log::info!("socks5 stream from address {}", addr);
 
         // 1. handshake
         let req = HandshakeRequest::read_from(&mut stream).await?;

@@ -3,7 +3,7 @@ use bytes::{Buf, BufMut, Bytes};
 use futures_core::{ready, Future};
 use futures_util::FutureExt;
 use tokio::{
-    io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf},
     sync::{
         mpsc::{
             channel,
@@ -18,6 +18,7 @@ use tokio::{
 use std::{
     cmp::min,
     collections::HashMap,
+    fmt::Debug,
     io::{self, Cursor},
     num::Wrapping,
     pin::Pin,
@@ -110,6 +111,7 @@ struct FinishFrame {
 struct NopFrame {
     stream_id: u32,
 }
+
 enum MuxFrame {
     Sync(SyncFrame),
     Push(PushFrame),
@@ -192,13 +194,7 @@ fn new_key<T>(map: &HashMap<u32, T>, hint: &AtomicU32) -> u32 {
     }
 }
 
-pub struct MuxStreamReadHalf {
-    rx: Receiver<PushFrame>,
-    read_buffer: Option<Bytes>,
-    closed: Arc<AtomicBool>,
-}
-
-impl AsyncRead for MuxStreamReadHalf {
+impl AsyncRead for MuxStream {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -228,15 +224,7 @@ impl AsyncRead for MuxStreamReadHalf {
     }
 }
 
-pub struct MuxStreamWriteHalf {
-    tx: Sender<MuxFrame>,
-    write_future:
-        Option<Pin<Box<dyn Future<Output = Result<(), SendError<MuxFrame>>> + Send + Sync>>>,
-    stream_id: u32,
-    closed: Arc<AtomicBool>,
-}
-
-impl AsyncWrite for MuxStreamWriteHalf {
+impl AsyncWrite for MuxStream {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -308,13 +296,46 @@ impl AsyncWrite for MuxStreamWriteHalf {
 }
 
 pub struct MuxStream {
-    read_half: MuxStreamReadHalf,
-    write_half: MuxStreamWriteHalf,
+    tx: Sender<MuxFrame>,
+    write_future:
+        Option<Pin<Box<dyn Future<Output = Result<(), SendError<MuxFrame>>> + Send + Sync>>>,
+    stream_id: u32,
+    rx: Receiver<PushFrame>,
+    read_buffer: Option<Bytes>,
+    closed: Arc<AtomicBool>,
+}
+
+impl Debug for MuxStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MuxStream: {}", self.stream_id).unwrap();
+        Ok(())
+    }
+}
+
+impl Drop for MuxStream {
+    fn drop(&mut self) {
+        self.closed.store(true, Ordering::Relaxed);
+        let frame = MuxFrame::Finish(FinishFrame {
+            stream_id: self.stream_id(),
+        });
+        if let Err(e) = self.tx.try_send(frame) {
+            match e {
+                TrySendError::Full(f) => {
+                    let tx = self.tx.clone();
+                    tokio::spawn(async move {
+                        let _ = tx.send(f).await;
+                    });
+                }
+                TrySendError::Closed(_) => {}
+            }
+        }
+    }
 }
 
 impl MuxStream {
+    #[inline]
     fn stream_id(&self) -> u32 {
-        self.write_half.stream_id
+        self.stream_id
     }
 
     fn new(
@@ -325,58 +346,22 @@ impl MuxStream {
         let closed = Arc::new(AtomicBool::new(false));
         (
             MuxStream {
-                read_half: MuxStreamReadHalf {
-                    rx,
-                    read_buffer: None,
-                    closed: closed.clone(),
-                },
-                write_half: MuxStreamWriteHalf {
-                    tx,
-                    stream_id,
-                    write_future: None,
-                    closed: closed.clone(),
-                },
+                rx,
+                read_buffer: None,
+                closed: closed.clone(),
+                tx,
+                stream_id,
+                write_future: None,
             },
             closed,
         )
     }
 }
 
-impl AsyncRead for MuxStream {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.read_half).poll_read(cx, buf)
-    }
-}
-
-impl AsyncWrite for MuxStream {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.write_half).poll_write(cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.write_half).poll_flush(cx)
-    }
-
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.write_half).poll_shutdown(cx)
-    }
-}
-
 impl ProxyTcpStream for MuxStream {}
 
 #[async_trait]
-impl UdpRead for MuxStreamReadHalf {
+impl UdpRead for ReadHalf<MuxStream> {
     async fn read_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, Address)> {
         let udp_header = UdpHeader::read_from(self).await?;
         let len = min(udp_header.payload_len as usize, buf.len());
@@ -386,7 +371,7 @@ impl UdpRead for MuxStreamReadHalf {
 }
 
 #[async_trait]
-impl UdpWrite for MuxStreamWriteHalf {
+impl UdpWrite for WriteHalf<MuxStream> {
     async fn write_to(&mut self, buf: &[u8], addr: &Address) -> io::Result<()> {
         let len = min(buf.len(), MAX_DATA_LEN);
         let udp_header = UdpHeader::new(addr, len);
@@ -402,24 +387,22 @@ pub struct MuxUdpStream {
 
 #[async_trait]
 impl ProxyUdpStream for MuxUdpStream {
-    type R = MuxStreamReadHalf;
-    type W = MuxStreamWriteHalf;
+    type R = ReadHalf<MuxStream>;
+    type W = WriteHalf<MuxStream>;
 
     fn split(self) -> (Self::R, Self::W) {
-        (self.inner.read_half, self.inner.write_half)
+        //(self.inner.read_half, self.inner.write_half)
+        split(self.inner)
     }
 
     fn reunite(r: Self::R, w: Self::W) -> Self {
         MuxUdpStream {
-            inner: MuxStream {
-                read_half: r,
-                write_half: w,
-            },
+            inner: r.unsplit(w),
         }
     }
 
     async fn close(mut self) -> io::Result<()> {
-        self.inner.write_half.shutdown().await
+        self.inner.shutdown().await
     }
 }
 
@@ -463,99 +446,139 @@ impl MuxHandle {
             let mux_map = mux_map.clone();
             let closed = closed.clone();
             tokio::spawn(async move {
-                loop {
-                    let frame = MuxFrame::read_from(&mut r).await.map_err(|e| {
-                        closed.store(true, Ordering::Relaxed);
-                        log::error!("mux read error: {}", e);
-                        e
-                    })?;
-                    match frame {
-                        MuxFrame::Sync(f) => {
-                            let stream_id = f.stream_id;
-                            let (tx, rx) = channel(PRIVATE_CHANNEL_LEN);
-                            let (stream, closed) = MuxStream::new(stream_id, write_tx.clone(), rx);
-                            mux_map
-                                .lock()
-                                .await
-                                .insert(f.stream_id, MuxStreamHandle { tx, closed });
-                            accept_stream_tx
-                                .send(stream)
-                                .await
-                                .map_err(|_| io::ErrorKind::ConnectionReset)?;
-                        }
-                        MuxFrame::Push(f) => {
-                            let stream_id = f.stream_id;
-                            let tx = {
-                                let m = mux_map.lock().await;
-                                if let Some(handle) = m.get(&stream_id) {
-                                    handle.tx.clone()
-                                } else {
-                                    log::debug!("invalid frame recvd, stream_id = {:x}", stream_id);
-                                    continue;
-                                }
-                            };
-                            if let Err(_) = tx.send(f).await {
-                                log::debug!(
-                                    "frame recvd but the stream %{:x} is closed",
-                                    stream_id
-                                );
-                                mux_map.lock().await.remove(&stream_id);
-                            }
-                        }
-                        MuxFrame::Finish(f) => {
-                            let stream_id = f.stream_id;
-                            if let Some(stream_handle) = mux_map.lock().await.remove(&stream_id) {
-                                stream_handle.close();
-                            }
-
-                            log::debug!("remote shutdown stream {:x}", f.stream_id);
-                        }
-                        MuxFrame::Nop(_) => {}
-                    }
+                async fn echo_finish_frame(
+                    stream_id: u32,
+                    write_tx: &Sender<MuxFrame>,
+                ) -> io::Result<()> {
+                    let new_frame = MuxFrame::Finish(FinishFrame { stream_id });
+                    write_tx
+                        .send(new_frame)
+                        .await
+                        .map_err(|_| io::ErrorKind::ConnectionReset)?;
+                    log::debug!("echo finish frame {:x}", stream_id);
+                    Ok(())
                 }
+                let fut = {
+                    let mux_map = mux_map.clone();
+                    async move {
+                        if false {
+                            return Err(io::Error::new(io::ErrorKind::ConnectionReset, ""));
+                        }
+                        if false {
+                            return Ok(());
+                        }
+                        loop {
+                            let frame = MuxFrame::read_from(&mut r).await?;
+                            match frame {
+                                MuxFrame::Sync(f) => {
+                                    let stream_id = f.stream_id;
+                                    let (tx, rx) = channel(PRIVATE_CHANNEL_LEN);
+                                    let (stream, closed) =
+                                        MuxStream::new(stream_id, write_tx.clone(), rx);
+                                    mux_map
+                                        .lock()
+                                        .await
+                                        .insert(f.stream_id, MuxStreamHandle { tx, closed });
+                                    accept_stream_tx
+                                        .send(stream)
+                                        .await
+                                        .map_err(|_| io::ErrorKind::ConnectionReset)?;
+                                }
+                                MuxFrame::Push(f) => {
+                                    let stream_id = f.stream_id;
+                                    let tx = {
+                                        let m = mux_map.lock().await;
+                                        if let Some(handle) = m.get(&stream_id) {
+                                            handle.tx.clone()
+                                        } else {
+                                            log::debug!(
+                                                "invalid frame recvd, stream_id = {:x}",
+                                                stream_id
+                                            );
+                                            echo_finish_frame(stream_id, &write_tx).await?;
+                                            continue;
+                                        }
+                                    };
+                                    if let Err(_) = tx.send(f).await {
+                                        log::debug!(
+                                            "frame recvd but the stream %{:x} is closed",
+                                            stream_id
+                                        );
+                                        mux_map.lock().await.remove(&stream_id);
+                                        echo_finish_frame(stream_id, &write_tx).await?;
+                                    }
+                                }
+                                MuxFrame::Finish(f) => {
+                                    let stream_id = f.stream_id;
+                                    if let Some(stream_handle) =
+                                        mux_map.lock().await.remove(&stream_id)
+                                    {
+                                        stream_handle.close();
+                                        echo_finish_frame(stream_id, &write_tx).await?;
+                                    }
+
+                                    log::debug!("remote shutdown stream {:x}", stream_id);
+                                }
+                                MuxFrame::Nop(_) => {}
+                            }
+                        }
+                    }
+                };
+                let _ = fut.await;
+                closed.store(true, Ordering::Relaxed);
+                mux_map.lock().await.clear();
+                log::debug!("mux read err");
+                Ok(())
             })
         };
         let write_handle: JoinHandle<io::Result<()>> = {
             let mux_map = mux_map.clone();
             let closed = closed.clone();
             tokio::spawn(async move {
-                loop {
-                    if let Some(mut frame) = write_rx.recv().await {
-                        match &mut frame {
-                            MuxFrame::Push(p) => {
-                                // oversized data
-                                if p.data.len() > MAX_DATA_LEN {
-                                    while p.data.len() > MAX_DATA_LEN {
-                                        let new_data = p.data.split_off(MAX_DATA_LEN);
-                                        let new_frame = MuxFrame::Push(PushFrame {
-                                            stream_id: p.stream_id,
-                                            data: new_data,
-                                        });
-                                        new_frame.write_to(&mut w).await.map_err(|e| {
-                                            closed.store(true, Ordering::Relaxed);
-                                            log::error!("mux write error: {}", e);
-                                            e
-                                        })?;
-                                    }
-                                }
-                            }
-
-                            MuxFrame::Finish(f) => {
-                                log::debug!("local shutdown stream {:x}", f.stream_id);
-                                mux_map.lock().await.remove(&f.stream_id);
-                            }
-                            _ => {}
+                let fut = {
+                    let mux_map = mux_map.clone();
+                    async move {
+                        // Stupid workaround
+                        if false {
+                            return Err(io::Error::new(io::ErrorKind::ConnectionReset, ""));
                         }
-                        frame.write_to(&mut w).await.map_err(|e| {
-                            closed.store(true, Ordering::Relaxed);
-                            log::error!("mux write error: {}", e);
-                            e
-                        })?;
-                    } else {
-                        log::debug!("all write_tx are closed",);
-                        return Ok(());
+                        loop {
+                            if let Some(mut frame) = write_rx.recv().await {
+                                match &mut frame {
+                                    MuxFrame::Push(p) => {
+                                        // oversized data
+                                        if p.data.len() > MAX_DATA_LEN {
+                                            while p.data.len() > MAX_DATA_LEN {
+                                                let new_data = p.data.split_off(MAX_DATA_LEN);
+                                                let new_frame = MuxFrame::Push(PushFrame {
+                                                    stream_id: p.stream_id,
+                                                    data: new_data,
+                                                });
+                                                new_frame.write_to(&mut w).await?;
+                                            }
+                                        }
+                                    }
+
+                                    MuxFrame::Finish(f) => {
+                                        log::debug!("local shutdown stream {:x}", f.stream_id);
+                                        mux_map.lock().await.remove(&f.stream_id);
+                                    }
+                                    _ => {}
+                                }
+                                frame.write_to(&mut w).await?;
+                            } else {
+                                log::debug!("all write_tx are closed",);
+                                return Ok(());
+                            }
+                        }
                     }
+                };
+                if let Err(e) = fut.await {
+                    log::error!("mux write err {}", e);
+                    closed.store(true, Ordering::Relaxed);
                 }
+                mux_map.lock().await.clear();
+                Ok(())
             })
         };
         Self {
@@ -601,5 +624,15 @@ impl MuxHandle {
 
     async fn established_streams(&self) -> usize {
         self.mux_map.lock().await.len()
+    }
+
+    fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::Relaxed)
+    }
+
+    fn close(&self) {
+        self.closed.store(true, Ordering::Relaxed);
+        self.read_handle.abort();
+        self.write_handle.abort();
     }
 }

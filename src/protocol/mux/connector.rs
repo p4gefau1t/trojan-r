@@ -1,16 +1,12 @@
 use std::{
     collections::HashMap,
     io,
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc,
-    },
-    time::Duration,
+    sync::{atomic::AtomicU32, Arc},
 };
 
 use async_trait::async_trait;
 use serde::Deserialize;
-use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
+use tokio::sync::Mutex;
 
 use super::{new_key, MuxHandle, MuxStream, MuxUdpStream, RequestHeader};
 use crate::protocol::{Address, ProxyConnector};
@@ -18,65 +14,27 @@ use crate::protocol::{Address, ProxyConnector};
 #[derive(Deserialize)]
 pub struct MuxConnectorConfig {
     concurrent: usize,
-    timeout: u32,
 }
 
 pub struct MuxConnector<T: ProxyConnector> {
-    handlers: Arc<Mutex<HashMap<u32, MuxHandle>>>,
+    handlers: Mutex<HashMap<u32, MuxHandle>>,
     concurrent: usize,
     inner: T,
-    cleaner_handle: JoinHandle<()>,
     handle_id_hint: Arc<AtomicU32>,
-}
-
-impl<T: ProxyConnector> Drop for MuxConnector<T> {
-    fn drop(&mut self) {
-        self.cleaner_handle.abort();
-    }
 }
 
 impl<T: ProxyConnector> MuxConnector<T> {
     pub fn new(config: &MuxConnectorConfig, inner: T) -> io::Result<Self> {
-        let handlers: Arc<Mutex<HashMap<u32, MuxHandle>>> = Arc::new(Mutex::new(HashMap::new()));
-        if config.concurrent < 2 || config.timeout == 0 {
+        let handlers = Mutex::new(HashMap::new());
+        if config.concurrent < 2 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "invalid parameters for mux",
             ));
         }
-        let cleaner_handle = {
-            let timeout = Duration::from_secs(config.timeout as u64);
-            let handlers = handlers.clone();
-            let concurrent = config.concurrent;
-            tokio::spawn(async move {
-                loop {
-                    sleep(timeout).await;
-                    log::debug!("cleaning inactive mux stream..");
-                    let mut handlers = handlers.lock().await;
-                    let mut inactive_handle_id = Vec::new();
-                    for (handle_id, handle) in handlers.iter() {
-                        let num_streams = handle.established_streams().await;
-                        let closed = handle.closed.load(Ordering::Relaxed);
-                        if num_streams == 0 || closed {
-                            inactive_handle_id.push(*handle_id);
-                        }
-                        log::debug!(
-                            "mux handle {:x}: {}/{}",
-                            *handle_id,
-                            num_streams,
-                            concurrent
-                        );
-                    }
-                    for handle_id in inactive_handle_id.iter() {
-                        handlers.remove(handle_id);
-                    }
-                }
-            })
-        };
         Ok(Self {
             concurrent: config.concurrent,
             handlers,
-            cleaner_handle,
             inner,
             handle_id_hint: Arc::new(AtomicU32::new(0)),
         })
@@ -84,12 +42,44 @@ impl<T: ProxyConnector> MuxConnector<T> {
 }
 
 impl<T: ProxyConnector> MuxConnector<T> {
+    async fn clean_mux_streams(&self) {
+        let mut inactive_handle_id = Vec::new();
+        let mut handlers = self.handlers.lock().await;
+        for (handle_id, handle) in handlers.iter() {
+            let num_streams = handle.established_streams().await;
+            if num_streams == 0 || handle.is_closed() {
+                inactive_handle_id.push(*handle_id);
+            }
+            log::debug!(
+                "mux handle {:x}: {}/{}",
+                *handle_id,
+                num_streams,
+                self.concurrent
+            );
+        }
+        for handle_id in inactive_handle_id.iter() {
+            let handle = handlers.remove(handle_id).unwrap();
+            handle.close();
+        }
+    }
+
     async fn spawn_mux_stream(&self) -> io::Result<MuxStream> {
         let mut handlers = self.handlers.lock().await;
         loop {
             for (handle_id, handle) in handlers.iter() {
                 if handle.established_streams().await < self.concurrent {
-                    let stream = handle.connect().await?;
+                    let stream = match handle.connect().await {
+                        Ok(stream) => stream,
+                        Err(e) => {
+                            log::error!(
+                                "fail to spawn new mux stream from handle {:x}: {}",
+                                *handle_id,
+                                e
+                            );
+                            handle.close();
+                            continue;
+                        }
+                    };
                     log::debug!(
                         "mux stream {:x} spawned from handle {:x}",
                         stream.stream_id(),
@@ -117,6 +107,7 @@ impl<T: ProxyConnector> ProxyConnector for MuxConnector<T> {
 
     async fn connect_tcp(&self, addr: &Address) -> io::Result<Self::TS> {
         let mut stream = self.spawn_mux_stream().await?;
+        self.clean_mux_streams().await;
         let header = RequestHeader::TcpConnect(addr.clone());
         header.write_to(&mut stream).await?;
         return Ok(stream);
@@ -124,6 +115,7 @@ impl<T: ProxyConnector> ProxyConnector for MuxConnector<T> {
 
     async fn connect_udp(&self) -> io::Result<Self::US> {
         let mut stream = self.spawn_mux_stream().await?;
+        self.clean_mux_streams().await;
         let header = RequestHeader::UdpAssociate;
         header.write_to(&mut stream).await?;
         Ok(MuxUdpStream { inner: stream })
