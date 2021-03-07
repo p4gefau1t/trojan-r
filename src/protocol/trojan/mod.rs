@@ -140,6 +140,7 @@ pub struct UdpHeader {
 }
 
 impl UdpHeader {
+    #[inline]
     pub fn new(addr: &Address, payload_len: usize) -> Self {
         Self {
             address: addr.clone(),
@@ -151,14 +152,14 @@ impl UdpHeader {
     where
         R: AsyncRead + Unpin,
     {
-        let address = Address::read_from_stream(stream).await?;
-        log::debug!("udp addr read: {}", address);
+        let addr = Address::read_from_stream(stream).await?;
         let mut buf = [0u8; 2];
         stream.read_exact(&mut buf).await?;
         let len = ((buf[0] as u16) << 8) | (buf[1] as u16);
         stream.read_exact(&mut buf).await?;
+        log::debug!("udp addr={} len={}", addr, len);
         Ok(Self {
-            address,
+            address: addr,
             payload_len: len,
         })
     }
@@ -168,7 +169,6 @@ impl UdpHeader {
         W: AsyncWrite + Unpin,
     {
         let mut buf = Vec::with_capacity(self.address.serialized_len() + 2 + 1);
-        self.address.write_to_buf(&mut buf);
         let cursor = &mut buf;
         self.address.write_to_buf(cursor);
         cursor.put_u16(self.payload_len);

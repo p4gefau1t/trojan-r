@@ -42,7 +42,7 @@ async fn copy_udp<R: UdpRead, W: UdpWrite>(r: &mut R, w: &mut W) -> io::Result<(
     let mut buf = [0u8; RELAY_BUFFER_SIZE];
     loop {
         let (len, addr) = r.read_from(&mut buf).await?;
-        log::debug!("udp packet from {} len {}", addr, len);
+        log::debug!("udp packet addr={} len={}", addr, len);
         if len == 0 {
             break;
         }

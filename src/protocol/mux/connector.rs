@@ -59,7 +59,7 @@ impl<T: ProxyConnector> MuxConnector<T> {
         }
         for handle_id in inactive_handle_id.iter() {
             let handle = handlers.remove(handle_id).unwrap();
-            handle.close();
+            handle.close().await; // TODO dead lock?
         }
     }
 
@@ -76,13 +76,13 @@ impl<T: ProxyConnector> MuxConnector<T> {
                                 *handle_id,
                                 e
                             );
-                            handle.close();
+                            handle.close().await; // TODO dead lock?
                             continue;
                         }
                     };
                     log::debug!(
                         "mux stream {:x} spawned from handle {:x}",
-                        stream.stream_id(),
+                        stream.stream_id,
                         handle_id
                     );
                     return Ok(stream);

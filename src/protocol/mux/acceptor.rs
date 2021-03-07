@@ -77,7 +77,7 @@ impl MuxAcceptor {
                             let mux_handle = MuxHandle::new(stream);
                             loop {
                                 let mut stream = mux_handle.accept().await?;
-                                log::debug!("new mux stream {:x} accepted", stream.stream_id());
+                                log::debug!("new mux stream {:x} accepted", stream.stream_id);
                                 let header = RequestHeader::read_from(&mut stream).await?;
                                 let result = match header {
                                     RequestHeader::TcpConnect(addr) => {

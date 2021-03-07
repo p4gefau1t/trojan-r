@@ -18,7 +18,6 @@ use tokio::{
 use std::{
     cmp::min,
     collections::HashMap,
-    fmt::Debug,
     io::{self, Cursor},
     num::Wrapping,
     pin::Pin,
@@ -194,13 +193,31 @@ fn new_key<T>(map: &HashMap<u32, T>, hint: &AtomicU32) -> u32 {
     }
 }
 
+pub struct MuxStream {
+    tx: Sender<MuxFrame>,
+    stream_id: u32,
+    rx: Receiver<PushFrame>,
+    read_buffer: Option<Bytes>,
+    write_buffer: Option<Bytes>,
+    write_future:
+        Option<Pin<Box<dyn Future<Output = Result<(), SendError<MuxFrame>>> + Send + Sync>>>,
+    closed: Arc<AtomicBool>,
+}
+
+impl MuxStream {
+    #[inline]
+    fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::Relaxed)
+    }
+}
+
 impl AsyncRead for MuxStream {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        if self.closed.load(Ordering::Relaxed) {
+        if self.is_closed() {
             return Poll::Ready(Err(io::ErrorKind::ConnectionReset.into()));
         }
         loop {
@@ -224,13 +241,38 @@ impl AsyncRead for MuxStream {
     }
 }
 
+impl MuxStream {
+    fn try_send_frame(&mut self, frame: MuxFrame) -> io::Result<bool> {
+        if self.is_closed() {
+            return Err(io::ErrorKind::ConnectionReset.into());
+        }
+        // FIXME horrible workaround
+        if let Err(e) = self.tx.try_send(frame) {
+            match e {
+                TrySendError::Full(f) => {
+                    let tx = self.tx.clone();
+                    let fut = Box::pin(async move {
+                        tx.send(f).await?;
+                        Ok(())
+                    });
+                    self.write_future = Some(fut);
+                    Ok(false)
+                }
+                TrySendError::Closed(_) => Err(io::ErrorKind::ConnectionReset.into()),
+            }
+        } else {
+            Ok(true)
+        }
+    }
+}
+
 impl AsyncWrite for MuxStream {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        if self.closed.load(Ordering::Relaxed) {
+        if self.is_closed() {
             return Poll::Ready(Err(io::ErrorKind::ConnectionReset.into()));
         }
         loop {
@@ -239,33 +281,45 @@ impl AsyncWrite for MuxStream {
                     return Poll::Ready(Err(io::ErrorKind::ConnectionReset.into()));
                 }
                 self.write_future = None;
-                return Poll::Ready(Ok(buf.len()));
+                if self.write_buffer.is_none() {
+                    return Poll::Ready(Ok(buf.len()));
+                }
             }
 
             let stream_id = self.stream_id;
-            let frame = MuxFrame::Push(PushFrame {
-                stream_id,
-                data: Bytes::copy_from_slice(buf),
-            });
-
-            // FIXME horrible workaround
-            if let Err(e) = self.tx.try_send(frame) {
-                match e {
-                    TrySendError::Full(f) => {
-                        let tx = self.tx.clone();
-                        let fut = Box::pin(async move {
-                            tx.send(f).await?;
-                            Ok(())
-                        });
-                        self.write_future = Some(fut);
-                    }
-                    TrySendError::Closed(_) => {
-                        return Poll::Ready(Err(io::ErrorKind::ConnectionReset.into()));
+            if let Some(mut data) = self.write_buffer.take() {
+                let mut all_sent = true;
+                while data.len() > MAX_DATA_LEN {
+                    let fragment = data.split_off(MAX_DATA_LEN);
+                    let frame = MuxFrame::Push(PushFrame {
+                        stream_id,
+                        data: fragment,
+                    });
+                    if !self.try_send_frame(frame)? {
+                        // pending
+                        all_sent = false;
+                        break;
                     }
                 }
-            } else {
-                return Poll::Ready(Ok(buf.len()));
+                if !all_sent {
+                    self.write_buffer = Some(data);
+                    // poll write_future
+                    continue;
+                }
+                // last frame
+                let frame = MuxFrame::Push(PushFrame { stream_id, data });
+                if !self.try_send_frame(frame)? {
+                    // poll write_future, return Ready once the future is done
+                    self.write_buffer = None;
+                    continue;
+                } else {
+                    return Poll::Ready(Ok(buf.len()));
+                }
             }
+
+            // self.write_buffer == None, first polling
+            let data = Bytes::copy_from_slice(buf);
+            self.write_buffer = Some(data);
         }
     }
 
@@ -295,49 +349,30 @@ impl AsyncWrite for MuxStream {
     }
 }
 
-pub struct MuxStream {
-    tx: Sender<MuxFrame>,
-    write_future:
-        Option<Pin<Box<dyn Future<Output = Result<(), SendError<MuxFrame>>> + Send + Sync>>>,
-    stream_id: u32,
-    rx: Receiver<PushFrame>,
-    read_buffer: Option<Bytes>,
-    closed: Arc<AtomicBool>,
-}
-
-impl Debug for MuxStream {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MuxStream: {}", self.stream_id).unwrap();
-        Ok(())
-    }
-}
-
 impl Drop for MuxStream {
     fn drop(&mut self) {
-        self.closed.store(true, Ordering::Relaxed);
-        let frame = MuxFrame::Finish(FinishFrame {
-            stream_id: self.stream_id(),
-        });
-        if let Err(e) = self.tx.try_send(frame) {
-            match e {
-                TrySendError::Full(f) => {
-                    let tx = self.tx.clone();
-                    tokio::spawn(async move {
-                        let _ = tx.send(f).await;
-                    });
+        if !self.closed.load(Ordering::Relaxed) {
+            log::debug!("MuxStream was dropped without calling shutdown");
+            self.closed.store(true, Ordering::Relaxed);
+            let frame = MuxFrame::Finish(FinishFrame {
+                stream_id: self.stream_id,
+            });
+            if let Err(e) = self.tx.try_send(frame) {
+                match e {
+                    TrySendError::Full(f) => {
+                        let tx = self.tx.clone();
+                        tokio::spawn(async move {
+                            let _ = tx.send(f).await;
+                        });
+                    }
+                    TrySendError::Closed(_) => {}
                 }
-                TrySendError::Closed(_) => {}
             }
         }
     }
 }
 
 impl MuxStream {
-    #[inline]
-    fn stream_id(&self) -> u32 {
-        self.stream_id
-    }
-
     fn new(
         stream_id: u32,
         tx: Sender<MuxFrame>,
@@ -348,6 +383,7 @@ impl MuxStream {
             MuxStream {
                 rx,
                 read_buffer: None,
+                write_buffer: None,
                 closed: closed.clone(),
                 tx,
                 stream_id,
@@ -391,7 +427,6 @@ impl ProxyUdpStream for MuxUdpStream {
     type W = WriteHalf<MuxStream>;
 
     fn split(self) -> (Self::R, Self::W) {
-        //(self.inner.read_half, self.inner.write_half)
         split(self.inner)
     }
 
@@ -412,6 +447,7 @@ struct MuxStreamHandle {
 }
 
 impl MuxStreamHandle {
+    #[inline]
     fn close(&self) {
         self.closed.store(true, Ordering::Relaxed);
     }
@@ -460,6 +496,7 @@ impl MuxHandle {
                 }
                 let fut = {
                     let mux_map = mux_map.clone();
+                    // stupid workaround
                     async move {
                         if false {
                             return Err(io::Error::new(io::ErrorKind::ConnectionReset, ""));
@@ -495,17 +532,17 @@ impl MuxHandle {
                                                 "invalid frame recvd, stream_id = {:x}",
                                                 stream_id
                                             );
-                                            echo_finish_frame(stream_id, &write_tx).await?;
                                             continue;
                                         }
                                     };
                                     if let Err(_) = tx.send(f).await {
                                         log::debug!(
-                                            "frame recvd but the stream %{:x} is closed",
+                                            "frame recvd but the stream {:x} is closed",
                                             stream_id
                                         );
-                                        mux_map.lock().await.remove(&stream_id);
-                                        echo_finish_frame(stream_id, &write_tx).await?;
+                                        if let Some(_) = mux_map.lock().await.remove(&stream_id) {
+                                            echo_finish_frame(stream_id, &write_tx).await?;
+                                        }
                                     }
                                 }
                                 MuxFrame::Finish(f) => {
@@ -546,22 +583,13 @@ impl MuxHandle {
                             if let Some(mut frame) = write_rx.recv().await {
                                 match &mut frame {
                                     MuxFrame::Push(p) => {
-                                        // oversized data
-                                        if p.data.len() > MAX_DATA_LEN {
-                                            while p.data.len() > MAX_DATA_LEN {
-                                                let new_data = p.data.split_off(MAX_DATA_LEN);
-                                                let new_frame = MuxFrame::Push(PushFrame {
-                                                    stream_id: p.stream_id,
-                                                    data: new_data,
-                                                });
-                                                new_frame.write_to(&mut w).await?;
-                                            }
-                                        }
+                                        assert!(p.data.len() < MAX_DATA_LEN);
                                     }
-
                                     MuxFrame::Finish(f) => {
                                         log::debug!("local shutdown stream {:x}", f.stream_id);
-                                        mux_map.lock().await.remove(&f.stream_id);
+                                        if let None = mux_map.lock().await.remove(&f.stream_id) {
+                                            continue;
+                                        }
                                     }
                                     _ => {}
                                 }
@@ -622,17 +650,28 @@ impl MuxHandle {
         }
     }
 
+    #[inline]
     async fn established_streams(&self) -> usize {
         self.mux_map.lock().await.len()
     }
 
+    #[inline]
     fn is_closed(&self) -> bool {
         self.closed.load(Ordering::Relaxed)
     }
 
-    fn close(&self) {
+    #[inline]
+    async fn close(&self) {
         self.closed.store(true, Ordering::Relaxed);
+
+        // drop inner
         self.read_handle.abort();
         self.write_handle.abort();
+
+        let mut mux_map = self.mux_map.lock().await;
+        for (_, stream_handle) in mux_map.iter() {
+            stream_handle.close();
+        }
+        mux_map.clear();
     }
 }
