@@ -60,7 +60,7 @@ enum RequestHeader {
 }
 
 impl RequestHeader {
-    pub async fn read_from<R>(stream: &mut R) -> io::Result<Self>
+    async fn read_from<R>(stream: &mut R) -> io::Result<Self>
     where
         R: AsyncRead + Unpin,
     {
@@ -74,7 +74,7 @@ impl RequestHeader {
         }
     }
 
-    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
@@ -142,6 +142,7 @@ impl MuxFrame {
         if let MuxFrame::Push(f) = self {
             writer.write(&f.data).await?;
         }
+        writer.flush().await?;
         Ok(())
     }
 
