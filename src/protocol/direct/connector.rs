@@ -21,7 +21,7 @@ impl ProxyConnector for DirectConnector {
     }
 
     async fn connect_udp(&self) -> std::io::Result<Self::US> {
-        let socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let socket = Arc::new(UdpSocket::bind(":::0").await?);
         Ok(DirectUdpStream { inner: socket })
     }
 }
