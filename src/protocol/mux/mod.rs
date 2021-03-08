@@ -218,9 +218,6 @@ impl AsyncRead for MuxStream {
         cx: &mut Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        if self.is_closed() {
-            return Poll::Ready(Err(io::ErrorKind::ConnectionReset.into()));
-        }
         loop {
             if let Some(read_buffer) = &mut self.read_buffer {
                 if read_buffer.len() <= buf.remaining() {
@@ -307,7 +304,7 @@ impl AsyncWrite for MuxStream {
                     // poll write_future
                     continue;
                 }
-                // last frame
+                // the last frame
                 let frame = MuxFrame::Push(PushFrame { stream_id, data });
                 if !self.try_send_frame(frame)? {
                     // poll write_future, return Ready once the future is done
@@ -328,7 +325,51 @@ impl AsyncWrite for MuxStream {
         return Poll::Ready(Ok(()));
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
+        loop {
+            if let Some(fut) = &mut self.write_future {
+                if ready!(fut.poll_unpin(cx)).is_err() {
+                    return Poll::Ready(Err(io::ErrorKind::ConnectionReset.into()));
+                }
+                self.write_future = None;
+                if self.write_buffer.is_none() {
+                    break;
+                }
+            }
+            let stream_id = self.stream_id;
+            if let Some(mut data) = self.write_buffer.take() {
+                let mut all_sent = true;
+                while data.len() > MAX_DATA_LEN {
+                    let fragment = data.split_off(MAX_DATA_LEN);
+                    let frame = MuxFrame::Push(PushFrame {
+                        stream_id,
+                        data: fragment,
+                    });
+                    if !self.try_send_frame(frame)? {
+                        all_sent = false;
+                        break;
+                    }
+                }
+                if !all_sent {
+                    self.write_buffer = Some(data);
+                    // poll write_future
+                    continue;
+                }
+                // the last frame
+                let frame = MuxFrame::Push(PushFrame { stream_id, data });
+                if !self.try_send_frame(frame)? {
+                    self.write_buffer = None;
+                    continue;
+                } else {
+                    break;
+                }
+            }
+            break;
+        }
+
         self.closed.store(true, Ordering::Relaxed);
         let frame = MuxFrame::Finish(FinishFrame {
             stream_id: self.stream_id,
