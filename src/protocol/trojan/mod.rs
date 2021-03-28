@@ -2,10 +2,12 @@ use crate::error::Error;
 use async_trait::async_trait;
 use bytes::BufMut;
 use sha2::{Digest, Sha224};
-use std::{fmt::Write, io};
+use std::{fmt::Formatter, io, str};
 use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
 
 use super::{Address, ProxyTcpStream, ProxyUdpStream, UdpRead, UdpWrite};
+
+use serde::{de, Deserialize, Deserializer};
 
 pub mod acceptor;
 pub mod connector;
@@ -13,18 +15,68 @@ pub mod connector;
 const HASH_STR_LEN: usize = 56;
 
 fn new_error<T: ToString>(message: T) -> io::Error {
-    return Error::new(format!("trojan: {}", message.to_string())).into();
+    Error::new(format!("trojan: {}", message.to_string())).into()
 }
 
-fn password_to_hash<T: ToString>(s: T) -> String {
-    let mut hasher = Sha224::new();
-    hasher.update(&s.to_string().into_bytes());
-    let h = hasher.finalize();
-    let mut s = String::with_capacity(HASH_STR_LEN);
-    for i in h {
-        write!(s, "{:02x}", i).unwrap();
+/// trojan header password field
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Password(String);
+
+impl Password {
+    /// Creates a trojan request password field from serde deserialize.
+    pub fn new(pwd: &str) -> Password {
+        // create a Sha224 object
+        let mut hasher = Sha224::new();
+
+        // write input password.
+        hasher.update(pwd);
+
+        // read hash digest and consume hasher, then construct a valid
+        //utf-8 string which every character is hex.
+        let password = hasher
+            .finalize()
+            .iter()
+            .map(|x| format!("{:02x}", x))
+            .collect();
+        Password(password)
     }
-    s
+
+    /// create password from a bytes slice
+    pub fn read_from(passwd_buf: &[u8]) -> io::Result<Password> {
+        match str::from_utf8(passwd_buf) {
+            Ok(s) => Ok(Password(String::from(s))),
+            Err(_) => Err(new_error(format!(
+                "invalid password hash: {}",
+                String::from_utf8_lossy(passwd_buf)
+            ))),
+        }
+    }
+}
+
+impl<'d> Deserialize<'d> for Password {
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'d>>::Error>
+    where
+        D: Deserializer<'d>,
+    {
+        struct PasswordVisitor;
+
+        impl<'d> de::Visitor<'d> for PasswordVisitor {
+            type Value = Password;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str("expect 'valid password'")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(Password::new(v))
+            }
+        }
+
+        deserializer.deserialize_str(PasswordVisitor)
+    }
 }
 
 const CMD_TCP_CONNECT: u8 = 0x01;
@@ -58,14 +110,14 @@ const CMD_UDP_ASSOCIATE: u8 = 0x03;
 /// o  DST.PORT desired destination port in network octet order
 /// ```
 enum RequestHeader {
-    TcpConnect([u8; HASH_STR_LEN], Address),
-    UdpAssociate([u8; HASH_STR_LEN]),
+    TcpConnect(Password, Address),
+    UdpAssociate(Password),
 }
 
 impl RequestHeader {
     async fn read_from<R>(
         stream: &mut R,
-        valid_hash: &[u8],
+        password: &Password,
         first_packet: &mut Vec<u8>,
     ) -> io::Result<Self>
     where
@@ -78,11 +130,13 @@ impl RequestHeader {
             return Err(new_error("first packet too short"));
         }
 
-        if valid_hash != hash_buf {
+        let client_password = Password::read_from(&hash_buf[..])?;
+
+        if &client_password != password {
             first_packet.extend_from_slice(&hash_buf);
             return Err(new_error(format!(
                 "invalid password hash: {}",
-                String::from_utf8_lossy(&hash_buf)
+                client_password.0
             )));
         }
 
@@ -95,8 +149,8 @@ impl RequestHeader {
         stream.read_exact(&mut crlf_buf).await?;
 
         match cmd_buf[0] {
-            CMD_TCP_CONNECT => Ok(Self::TcpConnect(hash_buf, addr)),
-            CMD_UDP_ASSOCIATE => Ok(Self::UdpAssociate(hash_buf)),
+            CMD_TCP_CONNECT => Ok(Self::TcpConnect(client_password, addr)),
+            CMD_UDP_ASSOCIATE => Ok(Self::UdpAssociate(client_password)),
             _ => Err(new_error("invalid command")),
         }
     }
@@ -106,9 +160,9 @@ impl RequestHeader {
         W: AsyncWrite + Unpin,
     {
         let udp_dummy_addr = Address::new_dummy_address();
-        let (hash, addr, cmd) = match self {
-            RequestHeader::TcpConnect(hash, addr) => (hash, addr, CMD_TCP_CONNECT),
-            RequestHeader::UdpAssociate(hash) => (hash, &udp_dummy_addr, CMD_UDP_ASSOCIATE),
+        let (password, addr, cmd) = match self {
+            RequestHeader::TcpConnect(password, addr) => (password, addr, CMD_TCP_CONNECT),
+            RequestHeader::UdpAssociate(password) => (password, &udp_dummy_addr, CMD_UDP_ASSOCIATE),
         };
 
         let header_len = HASH_STR_LEN + 2 + 1 + addr.serialized_len() + 2;
@@ -116,7 +170,7 @@ impl RequestHeader {
 
         let cursor = &mut buf;
         let crlf = b"\r\n";
-        cursor.put_slice(hash);
+        cursor.put_slice(password.0.as_bytes());
         cursor.put_slice(crlf);
         cursor.put_u8(cmd);
         addr.write_to_buf(cursor);

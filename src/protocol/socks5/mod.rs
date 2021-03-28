@@ -20,7 +20,7 @@ const CMD_UDP_ASSOCIATE: u8 = 0x03;
 const REPLY_SUCCEEDED: u8 = 0x00;
 
 fn new_error<T: ToString>(message: T) -> io::Error {
-    return Error::new(format!("socks: {}", message.to_string())).into();
+    Error::new(format!("socks: {}", message.to_string())).into()
 }
 
 #[derive(Clone, Debug, Copy)]

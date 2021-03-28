@@ -35,7 +35,7 @@ pub mod acceptor;
 pub mod connector;
 
 fn new_error<T: ToString>(message: T) -> io::Error {
-    return Error::new(format!("mux: {}", message.to_string())).into();
+    Error::new(format!("mux: {}", message.to_string())).into()
 }
 
 const SMUX_VERSION: u8 = 1;
@@ -164,7 +164,7 @@ impl MuxFrame {
             CMD_NOP => MuxFrame::Nop(NopFrame { stream_id }),
             CMD_SYNC => MuxFrame::Sync(SyncFrame { stream_id }),
             CMD_PUSH => {
-                let mut buf = Vec::with_capacity(length as usize);
+                let mut buf = vec![0; length as usize];
                 buf.resize(length as usize, 0);
                 reader.read_exact(&mut buf).await?;
                 MuxFrame::Push(PushFrame {
@@ -322,7 +322,7 @@ impl AsyncWrite for MuxStream {
     }
 
     fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        return Poll::Ready(Ok(()));
+        Poll::Ready(Ok(()))
     }
 
     fn poll_shutdown(
@@ -387,7 +387,7 @@ impl AsyncWrite for MuxStream {
                 TrySendError::Closed(_) => {}
             }
         }
-        return Poll::Ready(Ok(()));
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -577,12 +577,12 @@ impl MuxHandle {
                                             continue;
                                         }
                                     };
-                                    if let Err(_) = tx.send(f).await {
+                                    if tx.send(f).await.is_err() {
                                         log::debug!(
                                             "frame recvd but the stream {:x} is closed",
                                             stream_id
                                         );
-                                        if let Some(_) = mux_map.lock().await.remove(&stream_id) {
+                                        if mux_map.lock().await.remove(&stream_id).is_some() {
                                             echo_finish_frame(stream_id, &write_tx).await?;
                                         }
                                     }
@@ -629,7 +629,7 @@ impl MuxHandle {
                                     }
                                     MuxFrame::Finish(f) => {
                                         log::debug!("local shutdown stream {:x}", f.stream_id);
-                                        if let None = mux_map.lock().await.remove(&f.stream_id) {
+                                        if mux_map.lock().await.remove(&f.stream_id).is_none() {
                                             continue;
                                         }
                                     }
@@ -664,8 +664,7 @@ impl MuxHandle {
 
     async fn generate_stream_id(&self) -> u32 {
         let mux_map = self.mux_map.lock().await;
-        let stream_id = new_key(&mux_map, &self.stream_id_hint);
-        stream_id
+        new_key(&mux_map, &self.stream_id_hint)
     }
 
     async fn connect(&self) -> io::Result<MuxStream> {

@@ -15,7 +15,6 @@ serde = { version = "1.0", features = ["derive"] }
 env_logger = "0.8"
 toml = "0.5"
 clap = "2.33"
-webpki = "0.21"
 webpki-roots = "0.21"
 tokio-tungstenite = "0.14"
 futures-core = "0.3"

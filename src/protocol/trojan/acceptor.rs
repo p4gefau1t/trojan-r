@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use bytes::Buf;
 use serde::Deserialize;
 use std::{io, str::FromStr};
 use tokio::{io::AsyncWriteExt, net::TcpStream};
@@ -7,16 +6,16 @@ use tokio::{io::AsyncWriteExt, net::TcpStream};
 use crate::protocol::{trojan::RequestHeader, AcceptResult, Address, ProxyAcceptor};
 use crate::proxy::relay_tcp;
 
-use super::{new_error, password_to_hash, TrojanUdpStream, HASH_STR_LEN};
+use super::{new_error, Password, TrojanUdpStream};
 
 #[derive(Deserialize)]
 pub struct TrojanAcceptorConfig {
-    password: String,
+    password: Password,
     fallback_addr: String,
 }
 
 pub struct TrojanAcceptor<T: ProxyAcceptor> {
-    valid_hash: [u8; HASH_STR_LEN],
+    password: Password,
     fallback_addr: Address,
     inner: T,
 }
@@ -28,7 +27,7 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
     async fn accept(&self) -> io::Result<AcceptResult<Self::TS, Self::US>> {
         let (mut stream, addr) = self.inner.accept().await?.unwrap_tcp_with_addr();
         let mut first_packet = Vec::new();
-        match RequestHeader::read_from(&mut stream, &self.valid_hash, &mut first_packet).await {
+        match RequestHeader::read_from(&mut stream, &self.password, &mut first_packet).await {
             Ok(header) => match header {
                 RequestHeader::TcpConnect(_, addr) => {
                     log::info!("trojan tcp stream {}", addr);
@@ -58,13 +57,10 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
 impl<T: ProxyAcceptor> TrojanAcceptor<T> {
     pub fn new(config: &TrojanAcceptorConfig, inner: T) -> io::Result<Self> {
         let fallback_addr = Address::from_str(&config.fallback_addr)?;
-        let mut valid_hash = [0u8; HASH_STR_LEN];
-        password_to_hash(&config.password)
-            .as_bytes()
-            .copy_to_slice(&mut valid_hash);
+        let password = config.password.clone();
         Ok(Self {
             fallback_addr,
-            valid_hash,
+            password,
             inner,
         })
     }

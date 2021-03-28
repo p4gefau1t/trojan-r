@@ -17,7 +17,7 @@ use std::{
 use super::ProxyTcpStream;
 
 fn new_error<T: ToString>(message: T) -> io::Error {
-    return Error::new(format!("websocket: {}", message.to_string())).into();
+    Error::new(format!("websocket: {}", message.to_string())).into()
 }
 
 pub struct BinaryWsStream<T: AsyncRead + AsyncWrite + Send + Sync + Unpin> {
@@ -49,7 +49,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + Sync> AsyncRead for BinaryWsStre
             if message.is_none() {
                 return Poll::Ready(Err(new_error("websocket stream drained")));
             }
-            let message = message.unwrap().map_err(|e| new_error(e))?;
+            let message = message.unwrap().map_err(new_error)?;
             // binary only
             match message {
                 Message::Binary(binary) => {
@@ -115,9 +115,9 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + Sync> AsyncWrite for BinaryWsStr
 
 impl<T: AsyncRead + AsyncWrite + Unpin + Send + Sync> BinaryWsStream<T> {
     pub fn new(inner: WebSocketStream<T>) -> Self {
-        return Self {
+        Self {
             inner,
             read_buffer: None,
-        };
+        }
     }
 }

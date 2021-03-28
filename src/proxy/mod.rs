@@ -4,9 +4,10 @@ use std::{
     sync::Arc,
 };
 
+use futures_util::future::{self, Either};
 use log::LevelFilter;
 use serde::Deserialize;
-use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{copy, split};
 
 use crate::{
     error::Error,
@@ -51,21 +52,6 @@ async fn copy_udp<R: UdpRead, W: UdpWrite>(r: &mut R, w: &mut W) -> io::Result<(
     Ok(())
 }
 
-async fn copy_tcp<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
-    r: &mut R,
-    w: &mut W,
-) -> io::Result<()> {
-    let mut buf = [0u8; RELAY_BUFFER_SIZE];
-    loop {
-        let len = r.read(&mut buf).await?;
-        if len == 0 {
-            break;
-        }
-        w.write(&buf[..len]).await?;
-    }
-    Ok(())
-}
-
 pub async fn relay_udp<T: ProxyUdpStream, U: ProxyUdpStream>(a: T, b: U) {
     let (mut a_rx, mut a_tx) = a.split();
     let (mut b_rx, mut b_tx) = b.split();
@@ -86,19 +72,26 @@ pub async fn relay_udp<T: ProxyUdpStream, U: ProxyUdpStream>(a: T, b: U) {
 pub async fn relay_tcp<T: ProxyTcpStream, U: ProxyTcpStream>(a: T, b: U) {
     let (mut a_rx, mut a_tx) = split(a);
     let (mut b_rx, mut b_tx) = split(b);
-    let t1 = copy_tcp(&mut a_rx, &mut b_tx);
-    let t2 = copy_tcp(&mut b_rx, &mut a_tx);
-    let e = tokio::select! {
-        e = t1 => {e}
-        e = t2 => {e}
-    };
-    if let Err(e) = e {
-        log::debug!("relay_tcp err: {}", e)
+    let l2r = copy(&mut a_rx, &mut b_tx);
+    let r2l = copy(&mut b_rx, &mut a_tx);
+    tokio::pin!(l2r);
+    tokio::pin!(r2l);
+
+    match future::select(l2r, r2l).await {
+        Either::Left((Ok(..), ..)) => {
+            log::debug!("tcp tunnel closed");
+        }
+        Either::Left((Err(err), ..)) => {
+            log::debug!("tcp tunnel closed with error: {}", err);
+        }
+        Either::Right((Ok(..), ..)) => {
+            log::debug!("tcp tunnel closed");
+        }
+        Either::Right((Err(err), ..)) => {
+            log::debug!("tcp tunnel closed with error: {}", err);
+        }
     }
-    let mut a = a_rx.unsplit(a_tx);
-    let mut b = b_rx.unsplit(b_tx);
-    let _ = a.shutdown().await;
-    let _ = b.shutdown().await;
+
     log::info!("tcp session ends");
 }
 
@@ -165,7 +158,7 @@ async fn run_proxy<I: ProxyAcceptor, O: ProxyConnector + 'static>(
                             relay_udp(inbound, outbound).await;
                         }
                         Err(e) => {
-                            log::error!("failed to relay tcp stream: {}", e.to_string());
+                            log::error!("failed to relay udp: {}", e.to_string());
                         }
                     }
                 });

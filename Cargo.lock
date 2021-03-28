@@ -773,7 +773,6 @@ dependencies = [
  "tokio-rustls",
  "tokio-tungstenite",
  "toml",
- "webpki",
  "webpki-roots",
 ]
 

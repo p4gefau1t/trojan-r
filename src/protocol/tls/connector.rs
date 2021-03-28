@@ -8,8 +8,7 @@ use std::{
     sync::Arc,
 };
 use tokio::net::TcpStream;
-use tokio_rustls::{client::TlsStream, rustls::ClientConfig, TlsConnector};
-use webpki::DNSNameRef;
+use tokio_rustls::{client::TlsStream, rustls::ClientConfig, webpki::DNSNameRef, TlsConnector};
 
 use super::get_cipher_suite;
 

@@ -25,9 +25,7 @@ impl<T: ProxyConnector> ProxyConnector for WebSocketConnector<T> {
 
     async fn connect_tcp(&self, addr: &crate::protocol::Address) -> io::Result<Self::TS> {
         let stream = self.inner.connect_tcp(addr).await?;
-        let (stream, resp) = client_async(&self.uri, stream)
-            .await
-            .map_err(|e| new_error(e))?;
+        let (stream, resp) = client_async(&self.uri, stream).await.map_err(new_error)?;
         if resp.status() != StatusCode::SWITCHING_PROTOCOLS {
             return Err(new_error(format!("bad status: {}", resp.status())));
         }
@@ -42,7 +40,7 @@ impl<T: ProxyConnector> ProxyConnector for WebSocketConnector<T> {
 
 impl<T: ProxyConnector> WebSocketConnector<T> {
     pub fn new(config: &WebSocketConnectorConfig, inner: T) -> io::Result<Self> {
-        let uri = config.uri.parse().map_err(|e| new_error(e))?;
+        let uri = config.uri.parse().map_err(new_error)?;
         Ok(Self { inner, uri })
     }
 }
