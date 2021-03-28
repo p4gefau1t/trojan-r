@@ -33,11 +33,8 @@ impl Password {
 
         // read hash digest and consume hasher, then construct a valid
         //utf-8 string which every character is hex.
-        let password = hasher
-            .finalize()
-            .iter()
-            .map(|x| format!("{:02x}", x))
-            .collect();
+        let password = format!("{:x}", hasher.finalize());
+        dbg!(&password);
         Password(password)
     }
 

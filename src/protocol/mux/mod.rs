@@ -165,7 +165,6 @@ impl MuxFrame {
             CMD_SYNC => MuxFrame::Sync(SyncFrame { stream_id }),
             CMD_PUSH => {
                 let mut buf = vec![0; length as usize];
-                buf.resize(length as usize, 0);
                 reader.read_exact(&mut buf).await?;
                 MuxFrame::Push(PushFrame {
                     stream_id,
