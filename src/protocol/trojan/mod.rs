@@ -2,7 +2,7 @@ use crate::error::Error;
 use async_trait::async_trait;
 use bytes::BufMut;
 use sha2::{Digest, Sha224};
-use std::{fmt::Formatter, io, str};
+use std::{fmt::Formatter, io, str, sync::Arc, collections::HashSet};
 use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
 
 use super::{Address, ProxyTcpStream, ProxyUdpStream, UdpRead, UdpWrite};
@@ -13,6 +13,8 @@ pub mod acceptor;
 pub mod connector;
 
 const HASH_STR_LEN: usize = 56;
+
+type Passwords = Arc<HashSet<Password>>;
 
 fn new_error<T: ToString>(message: T) -> io::Error {
     Error::new(format!("trojan: {}", message.to_string())).into()
@@ -113,7 +115,7 @@ enum RequestHeader {
 impl RequestHeader {
     async fn read_from<R>(
         stream: &mut R,
-        password: &Password,
+        passwords: Passwords,
         first_packet: &mut Vec<u8>,
     ) -> io::Result<Self>
     where
@@ -128,7 +130,7 @@ impl RequestHeader {
 
         let client_password = Password::read_from(&hash_buf[..])?;
 
-        if &client_password != password {
+        if !passwords.contains(&client_password) {
             first_packet.extend_from_slice(&hash_buf);
             return Err(new_error(format!(
                 "invalid password hash: {}",

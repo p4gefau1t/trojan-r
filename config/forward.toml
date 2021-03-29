@@ -6,7 +6,7 @@ target_addr = "8.8.8.8:53"
 listen_addr = "127.0.0.1:53"
 
 [trojan]
-password = "password"
+password = ["password1", "password2"]
 
 [tls]
 addr = "example.com:443"

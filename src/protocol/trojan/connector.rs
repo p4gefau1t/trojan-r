@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use serde::Deserialize;
-use std::io;
+use std::{io, collections::HashSet};
 
 use crate::protocol::{Address, ProxyConnector};
 
@@ -8,7 +8,7 @@ use super::{Password, RequestHeader, TrojanUdpStream};
 
 #[derive(Deserialize)]
 pub struct TrojanConnectorConfig {
-    password: Password,
+    passwords: HashSet<Password>,
 }
 
 pub struct TrojanConnector<T: ProxyConnector> {
@@ -20,7 +20,7 @@ impl<T: ProxyConnector> TrojanConnector<T> {
     pub fn new(config: &TrojanConnectorConfig, inner: T) -> io::Result<Self> {
         Ok(Self {
             inner,
-            password: config.password.clone(),
+            password: config.passwords.iter().next().unwrap().clone(),
         })
     }
 }

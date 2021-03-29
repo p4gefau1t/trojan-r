@@ -2,7 +2,7 @@ mode = "server"
 log_level = "debug" # optional
 
 [trojan]
-password = "password"
+passwords = ["password1", "password2"]
 fallback_addr = "127.0.0.1:80"
 
 [tls]

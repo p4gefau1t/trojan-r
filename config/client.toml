@@ -2,7 +2,7 @@ mode = "client"
 log_level = "debug" # optional
 
 [trojan]
-password = "password"
+passwords = ["password1", "password2"]
 
 [socks5]
 addr = "127.0.0.1:1080"
