@@ -2,7 +2,7 @@ use crate::error::Error;
 use async_trait::async_trait;
 use bytes::BufMut;
 use sha2::{Digest, Sha224};
-use std::{fmt::Formatter, io, str, sync::Arc, collections::HashSet};
+use std::{fmt::Formatter, io, str, collections::HashSet};
 use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
 
 use super::{Address, ProxyTcpStream, ProxyUdpStream, UdpRead, UdpWrite};
@@ -14,7 +14,6 @@ pub mod connector;
 
 const HASH_STR_LEN: usize = 56;
 
-type Passwords = Arc<HashSet<Password>>;
 
 fn new_error<T: ToString>(message: T) -> io::Error {
     Error::new(format!("trojan: {}", message.to_string())).into()
@@ -115,7 +114,7 @@ enum RequestHeader {
 impl RequestHeader {
     async fn read_from<R>(
         stream: &mut R,
-        passwords: Passwords,
+        passwords: HashSet<Password>,
         first_packet: &mut Vec<u8>,
     ) -> io::Result<Self>
     where

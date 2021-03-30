@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 use serde::Deserialize;
-use std::{collections::HashSet, io, str::FromStr, sync::Arc};
+use std::{collections::HashSet, io, str::FromStr};
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 use crate::protocol::{trojan::RequestHeader, AcceptResult, Address, ProxyAcceptor};
 use crate::proxy::relay_tcp;
 
-use super::{new_error, Password, Passwords, TrojanUdpStream};
+use super::{new_error, Password, TrojanUdpStream};
 
 #[derive(Deserialize)]
 pub struct TrojanAcceptorConfig {
@@ -15,7 +15,7 @@ pub struct TrojanAcceptorConfig {
 }
 
 pub struct TrojanAcceptor<T: ProxyAcceptor> {
-    passwords: Passwords,
+    passwords: HashSet<Password>,
     fallback_addr: Address,
     inner: T,
 }
@@ -58,7 +58,7 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
 impl<T: ProxyAcceptor> TrojanAcceptor<T> {
     pub fn new(config: &TrojanAcceptorConfig, inner: T) -> io::Result<Self> {
         let fallback_addr = Address::from_str(&config.fallback_addr)?;
-        let passwords = Arc::new(config.passwords.clone());
+        let passwords = config.passwords.clone();
         Ok(Self {
             fallback_addr,
             passwords,
