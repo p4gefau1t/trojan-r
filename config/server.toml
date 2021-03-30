@@ -6,10 +6,10 @@ passwords = ["password1", "password2"]
 fallback_addr = "127.0.0.1:80"
 
 [tls]
-addr = "0.0.0.0:443"
-sni = "example.com"
-cert = "cert.pem"
-key = "key.pem"
+addr = "127.0.0.1:8443"
+sni = "testserver.com"
+cert = "../test-ca/rsa/end.fullchain"
+key = "../test-ca/rsa/end.key"
 
 # optional
 # [plaintext]
