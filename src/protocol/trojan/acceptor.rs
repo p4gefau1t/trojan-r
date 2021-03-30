@@ -27,7 +27,7 @@ impl<T: ProxyAcceptor> ProxyAcceptor for TrojanAcceptor<T> {
     async fn accept(&self) -> io::Result<AcceptResult<Self::TS, Self::US>> {
         let (mut stream, addr) = self.inner.accept().await?.unwrap_tcp_with_addr();
         let mut first_packet = Vec::new();
-        match RequestHeader::read_from(&mut stream, self.passwords.clone(), &mut first_packet).await
+        match RequestHeader::read_from(&mut stream, &self.passwords, &mut first_packet).await
         {
             Ok(header) => match header {
                 RequestHeader::TcpConnect(_, addr) => {
