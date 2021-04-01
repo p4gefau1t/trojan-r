@@ -5,19 +5,19 @@ name: nightly
 jobs:
   build-windows:
     runs-on: windows-latest
-  steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-    - uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --release
-    - uses: actions/upload-artifact@v2
-      with:
-        name: build-windows
-        path: ./target/release/trojan-r
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+      - uses: actions/upload-artifact@v2
+        with:
+          name: build-windows
+          path: ./target/release/trojan-r
 
   build-linux:
     strategy:
