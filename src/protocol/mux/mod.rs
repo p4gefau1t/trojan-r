@@ -136,8 +136,8 @@ impl MuxFrame {
         assert!(data_length <= MAX_DATA_LEN);
         cursor.put_u8(SMUX_VERSION);
         cursor.put_u8(command);
-        cursor.put_u16(data_length as u16);
-        cursor.put_u32(stream_id);
+        cursor.put_u16_le(data_length as u16);
+        cursor.put_u32_le(stream_id);
         writer.write(&buf).await?;
         if let MuxFrame::Push(f) = self {
             writer.write(&f.data).await?;
@@ -156,8 +156,8 @@ impl MuxFrame {
             return Err(new_error("invalid mux version"));
         }
         let command = cursor.get_u8();
-        let length = cursor.get_u16();
-        let stream_id = cursor.get_u32();
+        let length = cursor.get_u16_le();
+        let stream_id = cursor.get_u32_le();
 
         let frame = match command {
             CMD_FINISH => MuxFrame::Finish(FinishFrame { stream_id }),
