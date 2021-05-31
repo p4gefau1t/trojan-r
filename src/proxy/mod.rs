@@ -62,6 +62,7 @@ async fn copy_tcp<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
             break;
         }
         w.write(&buf[..len]).await?;
+        w.flush().await?;
     }
     Ok(())
 }

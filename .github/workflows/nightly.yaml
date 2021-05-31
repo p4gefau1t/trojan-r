@@ -17,7 +17,7 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: build-windows
-          path: ./target/release/trojan-r
+          path: target\release\trojan-r
 
   build-linux:
     strategy:
@@ -39,4 +39,4 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: build-${{ matrix.target }}
-          path: ./target/${{ matrix.target }}/release/trojan-r
+          path: target/${{ matrix.target }}/release/trojan-r
