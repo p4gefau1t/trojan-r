@@ -17,7 +17,7 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: build-windows
-          path: target\release\trojan-r
+          path: target\release\trojan-r.exe
 
   build-linux:
     strategy:
