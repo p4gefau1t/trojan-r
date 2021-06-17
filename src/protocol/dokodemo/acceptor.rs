@@ -69,8 +69,7 @@ impl ProxyAcceptor for DokodemoAcceptor {
     type US = DokodemoUdpStream;
 
     async fn accept(&self) -> Result<AcceptResult<Self::TS, Self::US>> {
-        if !self.udp_spawned.load(Ordering::Relaxed) {
-            self.udp_spawned.store(true, Ordering::Relaxed);
+        if !self.udp_spawned.swap(true,Ordering::Relaxed) {
             let socket = Arc::new(UdpSocket::bind(self.tcp_listener.local_addr().unwrap()).await?);
             let udp_stream = DokodemoUdpStream {
                 inner: socket,
