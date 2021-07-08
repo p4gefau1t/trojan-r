@@ -64,6 +64,7 @@ jobs:
         run: |
           git clone https://github.com/briansmith/ring.git
           cd ring
+          git checkout 9cc0d45f4d8521f467bb3a621e74b1535e118188
           git fetch origin pull/1181/head:mips
           git config --global user.email "example.com"
           git config --global user.name "zrah"
